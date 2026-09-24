@@ -20,7 +20,7 @@ export class ContactoEmergenciaController {
 
   @Get('/:uid_location/id/:id')
   findOne(@Param('id') id: string) {
-    return this.contactoEmergenciaService.findOne(+id)
+    return this.contactoEmergenciaService.findOne(+id);
   }
 
   @Patch('/:uid_location/id/:id')
