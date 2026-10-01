@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { UpdateVentaDto } from './dto/update-venta.dto';
 import { Venta } from './entities/venta.entity';
@@ -8,6 +8,7 @@ import { Persona } from 'src/persona/entities/persona.entity';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { EmpresaSucursal } from 'src/empresa-sucursal/entities/empresa-sucursal.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { RangoFechasDto } from './dto/rango-fechas.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { DetalleventaMembresia } from 'src/detalleventa_membresias/entities/detalleventa_membresia.entity';
 import { DetalleventaProducto } from 'src/detalleventa_productos/entities/detalleventa_producto.entity';
@@ -208,6 +209,46 @@ export class VentaService {
       total
     }
   }
+  // Ventas activas entre fecha_inicio (desde las 00:00) y fecha_fin (hasta las 23:59:59.999), sin paginar,
+  // cada una con sus membresías activas (id_programa, id_plan, montoTotal).
+  async findByRangoFechas({ fecha_inicio, fecha_fin }: RangoFechasDto) {
+    const desde = new Date(`${fecha_inicio.slice(0, 10)}T00:00:00`);
+    const hasta = new Date(`${fecha_fin.slice(0, 10)}T23:59:59.999`);
+    if (hasta.getTime() < desde.getTime()) {
+      throw new BadRequestException('fecha_fin no puede ser anterior a fecha_inicio');
+    }
+    const [ ventas, total ] = await this.ventaRepository.findAndCount({
+      where: {
+        flag: true,
+        fecha_venta: Between(desde, hasta)
+      },
+      order: {
+        fecha_venta: 'ASC'
+      }
+    });
+
+    // Membresías activas de esas ventas (programa + monto), para filtrar/sumar por programa en los reportes.
+    // Se filtran por el mismo rango con un JOIN (no con IN(ids): SQL Server limita a 2100 parámetros).
+    const membresias = await this.detalleventaMembresiaRepository
+      .createQueryBuilder('m')
+      .innerJoin(Venta, 'v', 'v.id = m.id_venta')
+      .select(['m.id_venta AS id_venta', 'm.id_programa AS id_programa', 'm.id_plan AS id_plan', 'm.montoTotal AS montoTotal'])
+      .where('m.flag = 1 AND v.flag = 1')
+      .andWhere('v.fecha_venta BETWEEN :desde AND :hasta', { desde, hasta })
+      .getRawMany<{ id_venta: number, id_programa: number, id_plan: number, montoTotal: number }>();
+    const membresiasPorVenta = new Map<number, { id_programa: number, id_plan: number, montoTotal: number }[]>();
+    for (const { id_venta, id_programa, id_plan, montoTotal } of membresias) {
+      const listaVenta = membresiasPorVenta.get(id_venta) ?? [];
+      listaVenta.push({ id_programa, id_plan, montoTotal: Number(montoTotal) || 0 });
+      membresiasPorVenta.set(id_venta, listaVenta);
+    }
+
+    return {
+      lista: ventas.map((venta) => ({ ...venta, membresias: membresiasPorVenta.get(venta.id!) ?? [] })),
+      total
+    }
+  }
+
   async findAll(paginationDto: PaginationDto) {
     const { show, offset } = paginationDto;
     const [ lista, total ] = await this.ventaRepository.findAndCount({

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -46,15 +46,16 @@ export class UserService {
     return labels;
   }
 
-  async create(createUserDto: CreateUserDto) {
+  async create(createUserDto: CreateUserDto, idUserParent: number) {
     try {
-      const { password, uuid, id, ...userData } = createUserDto;
+      const { password, uuid, id, id_userParent, ...userData } = createUserDto;
 
       const passwordHash = await this.hashService.hash(password)
       const labels = await this.getTerminologiaLabels(userData);
       const user = this.userRepository.create({
         ...userData,
         ...labels,
+        id_userParent: idUserParent,
         uuid: uid(),
         password: 'Abc123456'
       });
@@ -146,6 +147,16 @@ export class UserService {
       items,
       total
     }
+  }
+
+  /** Solo datos para mostrar (nunca la contraseña) */
+  async findMe(id: number) {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      select: { id: true, nombres: true, apellidos: true, label_rol: true },
+    });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+    return user;
   }
 
   findOne(id: number) {

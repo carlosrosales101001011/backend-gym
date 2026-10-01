@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
-import { CreateModuloDto } from './dto/create-modulo.dto';
+import { CreateModuloDto, URLS_RESERVADAS } from './dto/create-modulo.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
 import { Repository } from 'typeorm';
 import { Modulo } from './entities/modulo.entity';
@@ -15,7 +15,16 @@ export class ModuloService {
     private readonly moduloRepository: Repository<Modulo>,
     private readonly fullTextSearchService: FullTextSearchService
   ) {}
+  // La url va en la raíz del front (/:url_modulo): no puede ser una ruta del sistema ni repetirse
+  private async validarUrl(url?: string, idActual?: number) {
+    if (!url) return;
+    if (URLS_RESERVADAS.includes(url)) throw new BadRequestException(`La url "${url}" está reservada por el sistema`);
+    const otro = await this.moduloRepository.findOne({ where: { url, flag: true } });
+    if (otro && otro.id !== idActual) throw new BadRequestException(`La url "${url}" ya la usa el módulo ${otro.label}`);
+  }
+
   async create(createModuloDto: CreateModuloDto) {
+    await this.validarUrl(createModuloDto.url);
     try {
       const modulo = this.moduloRepository.create({
         ...createModuloDto,
@@ -57,6 +66,7 @@ export class ModuloService {
   }
 
   async update(id: number, updateModuloDto: UpdateModuloDto) {
+    await this.validarUrl(updateModuloDto.url, id);
     try {
       const modulo = await this.moduloRepository.preload({
         id,

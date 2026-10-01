@@ -10,6 +10,11 @@ export class Comentario {
     id_user?:number;
     
     @Column('varchar', {
+        length: 170
+    })
+    label_user?:string;
+    
+    @Column('varchar', {
         length: 120
     })
     uid_location?:string;

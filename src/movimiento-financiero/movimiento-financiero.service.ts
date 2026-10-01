@@ -125,7 +125,9 @@ export class MovimientoFinancieroService {
         q,
         {
           take: show,
-          skip: offset
+          skip: offset,
+          // Mismo filtro que el listado (findAll): solo vigentes y del tipo de movimiento pedido
+          where: { flag: true, id_tipo_movimiento: id_tipo_movimiento || 0 }
         }
       );
       return {

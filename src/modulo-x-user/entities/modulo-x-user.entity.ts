@@ -7,6 +7,10 @@ export class ModuloXUser {
     @PrimaryGeneratedColumn('increment')
     id?:number;
 
+    // Identificador público del módulo del usuario: va en la URL del front (/:uid_mod/...) en lugar del id
+    @Column('varchar', { length: 40, nullable: true })
+    uid?:string;
+
     @Column('int')
     id_modulo?:number;
 

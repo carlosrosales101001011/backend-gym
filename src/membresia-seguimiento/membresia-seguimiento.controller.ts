@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common';
 import { MembresiaSeguimientoService } from './membresia-seguimiento.service';
 import { CreateMembresiaSeguimientoDto } from './dto/create-membresia-seguimiento.dto';
 import { UpdateMembresiaSeguimientoDto } from './dto/update-membresia-seguimiento.dto';
@@ -26,6 +26,12 @@ export class MembresiaSeguimientoController {
       items,
       total
     };
+  }
+
+  /** Membresías (seguimiento) de un cliente, la que vence más tarde primero */
+  @Get('/id_cli/:id_cli')
+  findAllByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {
+    return this.membresiaSeguimientoService.findAllByIdCli(id_cli);
   }
 
   @Get('/id/:id')

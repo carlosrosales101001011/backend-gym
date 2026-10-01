@@ -3,11 +3,13 @@ import { SeccionXModulouserService } from './seccion-x-modulouser.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SeccionXModulouser } from './entities/seccion-x-modulouser.entity';
 import { SeccionXModulouserController } from './seccion-x-modulouser.controller';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   controllers: [SeccionXModulouserController],
   providers: [SeccionXModulouserService],
   imports: [
+        UserModule,
         TypeOrmModule.forFeature([SeccionXModulouser])
       ]
 })

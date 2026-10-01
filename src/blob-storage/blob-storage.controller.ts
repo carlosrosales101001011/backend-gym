@@ -22,9 +22,16 @@ export class BlobStorageController {
   findAll(@Query() paginationDto: PaginationDto) {
     return this.blobStorageService.findAll(paginationDto);
   }
+  /** Imágenes vigentes de un uid_location, la más reciente primero */
   @Get('/uid_location/:uid_location')
-  findOnexUidLocation(@Param('uid_location') uid_location:string){
-    this.blobStorageService.findOnexUid(uid_location);
+  findAllxUidLocation(@Param('uid_location') uid_location:string){
+    return this.blobStorageService.findAllxUidLocation(uid_location);
+  }
+
+  /** Imagen vigente más reciente de un uid_location (null si no tiene) */
+  @Get('/uid_location/:uid_location/ultimo')
+  findUltimoxUidLocation(@Param('uid_location') uid_location:string){
+    return this.blobStorageService.findOnexUid(uid_location);
   }
   @Get('/search')
   async search(@Query() paginationDto: PaginationDto) {

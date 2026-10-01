@@ -48,6 +48,11 @@ export class ContactoEmergencia {
     @Column('int')
     id_cargo!:number; //PARENTEZCO O CARGO
 
+    @Column('varchar', {
+        length: 90
+    })
+    label_cargo!:string;
+
     @Column('bit', {
         default: true,
         select: false

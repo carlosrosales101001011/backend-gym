@@ -189,6 +189,23 @@ export class DetalleventaMembresiasService {
       }
   }
 
+  // Membresías activas (flag=true) de un cliente, ordenadas por fecha de inicio.
+  async findAllByIdCli(id_cli: number) {
+    return await this.detalleventaMembresiaRepository.find({
+      where: { id_cli, flag: true },
+      select: {
+        id: true,
+        id_venta: true,
+        label_venta: true,
+        label_programa: true,
+        label_plan: true,
+        fecha_inicio: true,
+        fecha_fin: true,
+      },
+      order: { fecha_inicio: 'ASC' },
+    });
+  }
+
   async findOne(id: number) {
     return await this.detalleventaMembresiaRepository.findOne({
       where: { id, flag: true },

@@ -29,6 +29,22 @@ export class Persona {
         nullable: true
     })
     url_avatar?:string;
+
+    // Url de la última imagen vigente del avatar en blob_storage (uid_location = uid_avatar); '' si se quitó la foto
+    @Column('text', {
+        nullable: true
+    })
+    url_avatar_ultimo?:string;
+
+    // Encuadre (x, y, zoom) de esa última imagen, copiado de blob_storage; null si no tiene foto
+    @Column('float', { nullable: true })
+    avatar_x_ultimo?:number | null;
+
+    @Column('float', { nullable: true })
+    avatar_y_ultimo?:number | null;
+
+    @Column('float', { nullable: true })
+    avatar_zoom_ultimo?:number | null;
     
     @Column('varchar', {
         length: 150

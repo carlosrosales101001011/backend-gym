@@ -22,5 +22,10 @@ export class PaginationDto{
     @IsOptional()
     q?: string;
 
+    /** Columnas donde buscar, separadas por coma; las usa FullTextSearchService (ver contexto-busqueda.ts) */
+    @IsString()
+    @IsOptional()
+    columnas?: string;
+
     
 }

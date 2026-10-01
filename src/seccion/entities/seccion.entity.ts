@@ -25,6 +25,10 @@ export class Seccion {
     @Column('int')
     id_children_seccion?:number;
 
+    // La sección está en mantenimiento
+    @Column('bit', { default: false })
+    is_seccion_mantenimiento?: boolean;
+
     @Column('bit', {
         default: true,
         select: false

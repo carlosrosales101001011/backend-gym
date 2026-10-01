@@ -25,6 +25,11 @@ export class PersonaController {
     return this.personaService.uploadAvatar(uid_avatar, file);
   }
 
+  @Delete('/avatar/:uid_avatar')
+  removeAvatar(@Param('uid_avatar') uid_avatar: string) {
+    return this.personaService.removeAvatar(uid_avatar);
+  }
+
   @Get('/id_tipo/:id_tipo')
   findAll(@Param('id_tipo') id_tipo: number, @Query() paginationDto: PaginationDto) {
     return this.personaService.findAll(id_tipo, paginationDto);
@@ -38,6 +43,13 @@ export class PersonaController {
       items,
       total
     };
+  }
+
+  /** Buscador de personas de cualquier tipo (clientes y colaboradores juntos) */
+  @Get('/search/box')
+  async searchBoxTodos(@Query('q') q: string) {
+    const { items, total } = await this.personaService.findSearchBoxTodos(q);
+    return { items, total };
   }
 
   @Get('/id_tipo/:id_tipo/search/box')

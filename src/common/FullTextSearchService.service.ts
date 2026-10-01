@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, EntityMetadata, EntityTarget } from 'typeorm';
+import type { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
+import { columnasBusquedaPedidas } from './contexto-busqueda';
 
 export type FullTextSearchWhereValue =
   | string
@@ -21,6 +23,11 @@ export interface FullTextSearchOptions {
    * - array     → IN (...)
    */
   where?: Record<string, FullTextSearchWhereValue | undefined>;
+  /**
+   * Columnas pedidas por el front ("Buscar en columnas"). Por defecto salen de ?columnas= de la request.
+   * Solo se usan las que también están en `columns` (la lista permitida del servicio).
+   */
+  columnasPedidas?: string[];
 }
 
 export interface PaginatedResult<T> {
@@ -68,7 +75,7 @@ export class FullTextSearchService {
     }
     const keyColumn = primaryColumn.databaseName;
 
-    const validColumns = columns
+    const validColumns = this.filtrarPedidas(columns, options.columnasPedidas ?? columnasBusquedaPedidas())
       .map(column => metadata.columns.find(col => col.propertyName === column))
       .filter((col): col is NonNullable<typeof col> => col !== undefined);
 
@@ -84,7 +91,7 @@ export class FullTextSearchService {
     // Un solo "haystack" con todas las columnas pegadas, con espacios
     // al inicio y al final para poder detectar inicio de palabra.
     const haystack = `' ' + ${validColumns
-      .map(col => `COALESCE(a.[${col.databaseName}], '')`)
+      .map(col => `COALESCE(${this.comoTexto(col)}, '')`)
       .join(` + ' ' + `)} + ' ' COLLATE ${this.collation}`;
 
     // Orden de parámetros: score (@0..@n), luego filtros, al final skip y take.
@@ -140,6 +147,28 @@ export class FullTextSearchService {
     const items = rows.map(({ total_count, ...rest }: any) => rest);
 
     return this.buildResult(items, total, take, skip);
+  }
+
+  /**
+   * La columna como texto para pegarla en el haystack: SQL Server no suma texto con int/decimal/date
+   * (da error de conversión). Las fechas van como dd/mm/aaaa, igual que se muestran en el sistema.
+   */
+  private comoTexto(col: ColumnMetadata): string {
+    const columna = `a.[${col.databaseName}]`;
+    const tipo = (typeof col.type === 'string' ? col.type : col.type?.name ?? '').toLowerCase();
+    if (['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'string', 'uniqueidentifier'].includes(tipo)) return columna;
+    if (['date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset'].includes(tipo)) return `CONVERT(varchar(10), ${columna}, 103)`;
+    return `CAST(${columna} AS nvarchar(100))`;
+  }
+
+  /**
+   * Columnas permitidas que el front pidió; si no pidió ninguna (o ninguna es permitida), todas las permitidas.
+   * Nunca agrega columnas fuera de la lista del servicio.
+   */
+  private filtrarPedidas(permitidas: string[], pedidas: string[]): string[] {
+    if (!pedidas.length) return permitidas;
+    const elegidas = permitidas.filter(columna => pedidas.includes(columna));
+    return elegidas.length ? elegidas : permitidas;
   }
 
   private async count(baseCte: string, baseParams: any[]): Promise<number> {

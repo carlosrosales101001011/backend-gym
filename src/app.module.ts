@@ -53,6 +53,9 @@ import { UbigeoModule } from './ubigeo/ubigeo.module';
 import { DetalleventaMembresiasModule } from './detalleventa_membresias/detalleventa_membresias.module';
 import { MembresiaExtensionModule } from './membresia_extension/membresia_extension.module';
 import { MembresiaSeguimientoModule } from './membresia-seguimiento/membresia-seguimiento.module';
+import { VentasMetaModule } from './ventas-meta/ventas-meta.module';
+import { DetallemetaAsesorModule } from './detallemeta_asesor/detallemeta_asesor.module';
+import { PersonaEventosAsistenciaModule } from './persona_eventos_asistencia/persona_eventos_asistencia.module';
 @Module({
   providers: [TasksService],
   imports: [
@@ -126,6 +129,9 @@ import { MembresiaSeguimientoModule } from './membresia-seguimiento/membresia-se
     DetalleventaMembresiasModule,
     MembresiaExtensionModule,
     MembresiaSeguimientoModule,
+    VentasMetaModule,
+    DetallemetaAsesorModule,
+    PersonaEventosAsistenciaModule,
   ],
 })
 export class AppModule {}

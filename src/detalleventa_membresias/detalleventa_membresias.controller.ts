@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common';
 import { DetalleventaMembresiasService } from './detalleventa_membresias.service';
 import { CreateDetalleventaMembresiaDto } from './dto/create-detalleventa_membresia.dto';
 import { UpdateDetalleventaMembresiaDto } from './dto/update-detalleventa_membresia.dto';
@@ -31,6 +31,12 @@ export class DetalleventaMembresiasController {
       items,
       total
     };
+  }
+
+  /** Membresías vendidas a un cliente (con sus fechas), de la más antigua a la más nueva */
+  @Get('/id_cli/:id_cli')
+  findAllByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {
+    return this.detalleventaMembresiasService.findAllByIdCli(id_cli);
   }
 
   @Get('/id/:id')

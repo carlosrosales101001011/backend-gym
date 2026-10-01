@@ -20,6 +20,19 @@ export class CreateBlobStorageDto {
     @IsString()
     uid?: string;
 
+    // Encuadre de la imagen (ver la entidad)
+    @IsNumber()
+    @IsOptional()
+    x?: number;
+
+    @IsNumber()
+    @IsOptional()
+    y?: number;
+
+    @IsNumber()
+    @IsOptional()
+    zoom?: number;
+
     @IsBoolean()
     @IsOptional()
     flag?: boolean;

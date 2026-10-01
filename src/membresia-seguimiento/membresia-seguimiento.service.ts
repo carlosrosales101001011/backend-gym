@@ -222,6 +222,14 @@ export class MembresiaSeguimientoService {
     return await this.membresiaSeguimientoRepository.findOne({ where: { id, flag: true } });
   }
 
+  // Todas las membresías vigentes (flag=true) de un cliente, la que vence más tarde primero.
+  async findAllByIdCli(id_cli: number) {
+    return await this.membresiaSeguimientoRepository.find({
+      where: { id_cli, flag: true },
+      order: { fecha_vencimiento: 'DESC' }
+    });
+  }
+
   // La más reciente (mayor id) entre las membresías vigentes (flag=true) de un cliente.
   async findUltimaActivaByIdCli(id_cli: number) {
     return await this.membresiaSeguimientoRepository.findOne({

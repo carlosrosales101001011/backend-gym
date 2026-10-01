@@ -3,14 +3,18 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
+import { JwtAuthGuard } from './guard/jwt-auth.guard';
+import { GetUser } from './decorator/get-user.decorator';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  /** Registra un usuario; quien lo registra (id_userParent) sale del token, no del body */
   @Post('register')
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.userService.create(createUserDto);
+  @UseGuards(JwtAuthGuard)
+  create(@Body() createUserDto: CreateUserDto, @GetUser('id') idUserParent: number) {
+    return this.userService.create(createUserDto, idUserParent);
   }
 
   @Post('login')
@@ -31,6 +35,13 @@ export class UserController {
       items,
       total
     };
+  }
+
+  /** Datos del usuario logueado (sale del token): nombre y rol para el header del Home */
+  @Get('/me')
+  @UseGuards(JwtAuthGuard)
+  findMe(@GetUser('id') idUser: number) {
+    return this.userService.findMe(idUser);
   }
 
   @Get(':id')

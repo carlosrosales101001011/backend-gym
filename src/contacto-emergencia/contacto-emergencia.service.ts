@@ -1,22 +1,42 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { CreateContactoEmergenciaDto } from './dto/create-contacto-emergencia.dto';
 import { UpdateContactoEmergenciaDto } from './dto/update-contacto-emergencia.dto';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ContactoEmergencia } from './entities/contacto-emergencia.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PaginationDto } from '../common/dtos/pagination.dto';
 import { v4 as uidv4 } from 'uuid'
+import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 @Injectable()
 export class ContactoEmergenciaService {
   private readonly logger = new Logger('contactoEmergenciaService')
   constructor(
       @InjectRepository(ContactoEmergencia)
-      private readonly contactoEmergenciaRepository:Repository<ContactoEmergencia>
+      private readonly contactoEmergenciaRepository:Repository<ContactoEmergencia>,
+      @InjectRepository(Terminologia)
+      private readonly terminologiaRepository: Repository<Terminologia>
     ){}
+
+  private async getTerminologiaLabels(dto: { id_cargo?: number }) {
+    const ids = [dto.id_cargo]
+      .filter((id): id is number => id !== undefined && id !== null);
+
+    const labels: Partial<ContactoEmergencia> = {};
+    if (ids.length === 0) return labels;
+
+    const terminologias = await this.terminologiaRepository.findBy({ id: In(ids) });
+    const valorPorId = new Map(terminologias.map(t => [t.id, t.valor]));
+
+    if (dto.id_cargo !== undefined) labels.label_cargo = valorPorId.get(dto.id_cargo);
+
+    return labels;
+  }
+
   async create(createContactoEmergenciaDto: CreateContactoEmergenciaDto, uid_location:string) {
     try {
       const uid = uidv4()
-      const contactoEmergencia = this.contactoEmergenciaRepository.create({...createContactoEmergenciaDto, uid_location, uuid: uid})
+      const labels = await this.getTerminologiaLabels(createContactoEmergenciaDto);
+      const contactoEmergencia = this.contactoEmergenciaRepository.create({...createContactoEmergenciaDto, ...labels, uid_location, uuid: uid})
       await this.contactoEmergenciaRepository.save(contactoEmergencia);
       return {
         ok: true,
@@ -28,13 +48,7 @@ export class ContactoEmergenciaService {
   }
 
   findAll(paginationDto: PaginationDto, uid_location:string) {
-    const { show, offset } = paginationDto;
       return this.contactoEmergenciaRepository.find({
-          take: show,
-          skip: offset,
-          relations: {
-            tipoPariente: true
-          },
           where: {
             flag: true,
             uid_location
@@ -52,9 +66,11 @@ export class ContactoEmergenciaService {
 
   async update(id: number, updateContactoEmergenciaDto: UpdateContactoEmergenciaDto) {
     try {
+      const labels = await this.getTerminologiaLabels(updateContactoEmergenciaDto);
       const contactoEmergencia = await this.contactoEmergenciaRepository.preload({
         id,
-        ...updateContactoEmergenciaDto
+        ...updateContactoEmergenciaDto,
+        ...labels
       })
       if(!contactoEmergencia) throw new NotFoundException(`contactoEmergencia with id: ${id} not found`)
       await this.contactoEmergenciaRepository.save(contactoEmergencia)

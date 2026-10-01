@@ -41,6 +41,11 @@ export class MembresiaSeguimiento {
     @Column({ type: 'date' })
     fecha_vencimiento?: Date;
 
+    @Column({ type: 'int', nullable: true })
+    n_congelamiento_actual?: number; // MEMBRESIA_EXTENSION.ENTITY=>[id]
+    // @Column({ type: 'int', nullable: true })
+    // n_r?: number; // MEMBRESIA_EXTENSION.ENTITY=>[id]
+
     @Column('bit', {
         default: true,
         select: false

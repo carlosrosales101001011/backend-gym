@@ -9,6 +9,14 @@ export class SeccionXModulouserService {
     @InjectRepository(SeccionXModulouser)
     private readonly SeccionXmoduloUserRepository:Repository<SeccionXModulouser>,
   ){}
+  // Secciones de un modulo_x_user por su uid, solo si pertenece al usuario
+  findSeccionesxUidModulo(uid_modulo: string, id_user: number) {
+    return this.SeccionXmoduloUserRepository.find({
+      where: { flag: true, moduloUser: { uid: uid_modulo, id_user } },
+      relations: ['seccion'],
+    });
+  }
+
   findSecciones(id_moduloUser:number) {
     return this.SeccionXmoduloUserRepository.find({where: {flag: true, id_modulouser: id_moduloUser}, relations: ['seccion']});
   }

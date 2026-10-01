@@ -118,12 +118,12 @@ export class ImpuestoService {
     const {items, total} =await this.fullTextSearchService.search(
         Impuesto,
         [
-          'label_codigo_moneda',
-          'label_banco',
-          'n_cuenta',
-          'cci',
-          'titular',
-          'descripcion'
+          'codigo',
+          'nombre',
+          'descripcion',
+          'label_tipo',
+          'label_aplica_sobre',
+          'label_base_calculo'
         ],
         q,
         {

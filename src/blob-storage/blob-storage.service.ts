@@ -78,8 +78,14 @@ export class BlobStorageService {
     return await this.blobStorageRepository.findOne({ where: { id, flag: true } });
   }
 
+  // Imágenes vigentes (flag=true) de un uid_location, la más reciente primero
+  async findAllxUidLocation(uid_location:string){
+    return await this.blobStorageRepository.find({ where: { flag: true, uid_location }, order: { id: 'DESC' } });
+  }
+
+  // Imagen vigente (flag=true) de un uid_location: la más reciente si hay varias
   async findOnexUid(uid_location:string){
-    return await this.blobStorageRepository.findOne({ where: {  flag: true, uid_location: uid_location } });
+    return await this.blobStorageRepository.findOne({ where: { flag: true, uid_location }, order: { id: 'DESC' } });
   }
 
   async update(id: number, updateBlobStorageDto: UpdateBlobStorageDto) {
@@ -90,6 +96,7 @@ export class BlobStorageService {
     if (!blobStorage) throw new BadRequestException(`BlobStorage with id ${id} not found`);
     try {
       await this.blobStorageRepository.save(blobStorage);
+      await this.sincronizarEncuadreAvatar(blobStorage);
       return {
         ok: true,
         msg: 'actualizado con exito'
@@ -101,6 +108,29 @@ export class BlobStorageService {
 
   remove(id: number) {
     return this.blobStorageRepository.update(id, { flag: false });
+  }
+
+  /** Si la imagen es la última vigente del avatar de una persona (uid_location = uid_avatar), le copia su encuadre */
+  private async sincronizarEncuadreAvatar({ id, uid_location, x, y, zoom }: BlobStorage) {
+    await this.blobStorageRepository.query(`
+      UPDATE persona SET avatar_x_ultimo = @0, avatar_y_ultimo = @1, avatar_zoom_ultimo = @2
+      WHERE uid_avatar = @3
+        AND @4 = (SELECT TOP 1 id FROM blob_storage WHERE uid_location = @3 AND flag = 1 ORDER BY id DESC)
+    `, [x, y, zoom, uid_location, id]);
+  }
+
+  /** Imagen vigente (la más reciente, flag=true) de un uid_location, con su encuadre; null si no hay */
+  async findUltimaPorUidLocation(uid_location: string) {
+    return await this.blobStorageRepository.findOne({
+      where: { uid_location, flag: true },
+      select: { id: true, x: true, y: true, zoom: true },
+      order: { id: 'DESC' },
+    });
+  }
+
+  /** Da de baja (flag=false) las imágenes vinculadas a un uid_location (ej. el uid_avatar de una persona) */
+  removeByUidLocation(uid_location: string) {
+    return this.blobStorageRepository.update({ uid_location, flag: true }, { flag: false });
   }
 
   async findSearch(

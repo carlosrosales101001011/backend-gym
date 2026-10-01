@@ -44,8 +44,10 @@ export class CreateUserDto {
     @IsNumber()
     id_empl!: number;
 
+    /** Lo pone el backend con el usuario del token; si llega en el body se ignora */
     @IsNumber()
-    id_userParent!: number;
+    @IsOptional()
+    id_userParent?: number;
 
     @Type(() => Date)
     @IsDate()

@@ -18,5 +18,9 @@ export class CreateSeccionDto {
 
     @IsBoolean()
     @IsOptional()
+    is_seccion_mantenimiento?:boolean;
+
+    @IsBoolean()
+    @IsOptional()
     flag?:boolean;
 }

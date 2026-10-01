@@ -3,6 +3,7 @@ import { VentaService } from './venta.service';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { UpdateVentaDto } from './dto/update-venta.dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { RangoFechasDto } from './dto/rango-fechas.dto';
 
 @Controller('venta')
 export class VentaController {
@@ -16,6 +17,12 @@ export class VentaController {
   @Get('/id_cli/:id_cli')
   findByIdCli(@Param('id_cli') id_cli:number) {
     return this.ventaService.findByIdCli(id_cli);
+  }
+
+  // ej: GET /venta/rango-fechas?fecha_inicio=2026-08-01&fecha_fin=2026-08-31
+  @Get('/rango-fechas')
+  findByRangoFechas(@Query() rangoFechasDto: RangoFechasDto) {
+    return this.ventaService.findByRangoFechas(rangoFechasDto);
   }
 
   @Get()

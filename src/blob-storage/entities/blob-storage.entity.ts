@@ -23,6 +23,17 @@ export class BlobStorage {
     @Column({ type: 'varchar', length: 120 })
     uid?: string;
 
+    // Encuadre de la imagen (ej. el círculo del avatar); no modifica el archivo:
+    // x / y = desplazamiento del centro de la imagen como fracción del lado del visor, zoom = 1 sin acercar
+    @Column({ type: 'float', default: 0 })
+    x?: number;
+
+    @Column({ type: 'float', default: 0 })
+    y?: number;
+
+    @Column({ type: 'float', default: 1 })
+    zoom?: number;
+
     @Column('bit', {
         default: true,
         select: false

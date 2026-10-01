@@ -39,6 +39,13 @@ export class EntrenamientoPlan {
     })
     citas_nutricion_regalo?:number;
 
+    @Column('decimal', {
+        precision: 10,
+        scale: 2,
+        default: 0
+    })
+    max_descuento?:number;
+
     @Column('bit', {
         default: false
     })

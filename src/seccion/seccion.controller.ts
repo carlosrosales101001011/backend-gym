@@ -33,12 +33,12 @@ export class SeccionController {
   }
 
 
-  @Patch('/:id')
+  @Patch('/id/:id')
   update(@Param('id') id: string, @Body() updateSeccionDto: UpdateSeccionDto) {
     return this.seccionService.update(+id, updateSeccionDto);
   }
 
-  @Delete('/:id')
+  @Delete('/id/:id')
   remove(@Param('id') id: string) {
     return this.seccionService.remove(+id);
   }

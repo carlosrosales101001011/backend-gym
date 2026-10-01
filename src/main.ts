@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { middlewareContextoBusqueda } from './common/contexto-busqueda';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,6 +11,8 @@ async function bootstrap() {
     credentials: true, // si usas cookies o auth
   })
   app.setGlobalPrefix('api');
+  // Columnas del buscador (?columnas=) disponibles para FullTextSearchService en toda la request
+  app.use(middlewareContextoBusqueda);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

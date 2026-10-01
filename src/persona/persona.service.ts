@@ -33,6 +33,29 @@ export class PersonaService {
     // this.obtenerTerminologiaPersonaCarcel();
   }
 
+  // Las personas sin url_avatar_ultimo o sin encuadre (columnas nuevas) los toman de su última imagen vigente en blob_storage
+  async onModuleInit() {
+    try {
+      await this.personaRepository.query(`
+        UPDATE p SET
+          p.url_avatar_ultimo = COALESCE(p.url_avatar_ultimo, CONCAT('/', b.clasificacion, '/', b.name_image)),
+          p.avatar_x_ultimo = b.x,
+          p.avatar_y_ultimo = b.y,
+          p.avatar_zoom_ultimo = b.zoom
+        FROM persona p
+        CROSS APPLY (
+          SELECT TOP 1 clasificacion, name_image, x, y, zoom
+          FROM blob_storage
+          WHERE uid_location = p.uid_avatar AND flag = 1
+          ORDER BY id DESC
+        ) b
+        WHERE p.url_avatar_ultimo IS NULL OR p.avatar_x_ultimo IS NULL
+      `);
+    } catch (error) {
+      this.logger.error('No se pudo completar url_avatar_ultimo / encuadre de persona', error);
+    }
+  }
+
   // Recorre TODA la tabla Persona y actualiza sus label_* a partir de los id_*
   // que son netamente terminología (NO incluye id_distrito, que proviene de Ubigeo).
   private async obtenerTerminologiaPersonaCarcel() {
@@ -126,6 +149,31 @@ export class PersonaService {
     }
   }
 
+  // Imagen vigente del avatar con su encuadre (x, y, zoom) para mostrarla; null si no tiene foto.
+  private async avatarActual(uid_avatar?: string) {
+    if (!uid_avatar) return null;
+    return await this.blobStorageService.findUltimaPorUidLocation(uid_avatar);
+  }
+
+  // Quita la foto de la persona: url_avatar y url_avatar_ultimo vacías, sin encuadre, y sus imágenes del blob storage dadas de baja (flag=false).
+  async removeAvatar(uid_avatar: string) {
+    const persona = await this.personaRepository.findOneBy({ uid_avatar });
+    if (!persona) throw new BadRequestException(`Persona con uid_avatar ${uid_avatar} no encontrada`);
+    try {
+      await this.personaRepository.update(persona.id!, {
+        url_avatar: '',
+        url_avatar_ultimo: '',
+        avatar_x_ultimo: null,
+        avatar_y_ultimo: null,
+        avatar_zoom_ultimo: null,
+      });
+      await this.blobStorageService.removeByUidLocation(uid_avatar);
+      return { ok: true, msg: 'avatar eliminado con exito', uid_avatar };
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
+  }
+
   async uploadAvatar(uid_avatar: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No se recibió ninguna imagen');
 
@@ -145,15 +193,23 @@ export class PersonaService {
         file
       );
 
-      // se actualiza la url_avatar con la nueva imagen
+      // se actualizan url_avatar, url_avatar_ultimo y el encuadre con la nueva imagen (la última del blob storage)
       const url_avatar = `/${blobStorage!.clasificacion}/${blobStorage!.name_image}`;
-      await this.personaRepository.update(persona.id!, { url_avatar });
+      await this.personaRepository.update(persona.id!, {
+        url_avatar,
+        url_avatar_ultimo: url_avatar,
+        avatar_x_ultimo: blobStorage!.x ?? 0,
+        avatar_y_ultimo: blobStorage!.y ?? 0,
+        avatar_zoom_ultimo: blobStorage!.zoom ?? 1,
+      });
 
       return {
         ok: true,
         msg: 'avatar actualizado con exito',
         uid_avatar,
-        url_avatar
+        url_avatar,
+        // id del registro de la imagen: sirve para guardarle el encuadre (PATCH /blob-storage/id/:id)
+        id_blob: blobStorage!.id
       };
     } catch (error) {
       this.handleDBExceptions(error);
@@ -259,6 +315,26 @@ export class PersonaService {
       }
     }
 
+    // Buscador de clientes y colaboradores juntos (id_tipo 2 y 1): mismos campos que findSearchBox
+    async findSearchBoxTodos(q: string) {
+      const SEARCH_BOX_LIMIT = 20;
+      const TIPOS = [1, 2];
+      if (!q || q.trim().length === 0) {
+        const [items, total] = await this.personaRepository.findAndCount({
+          where: { flag: true, id_tipo: In(TIPOS) },
+          take: SEARCH_BOX_LIMIT,
+          order: { id: 'DESC' },
+        });
+        return { items, total };
+      }
+      return await this.fullTextSearchService.search(
+        Persona,
+        ['nombres', 'apellido_paterno', 'apellido_materno', 'telefono', 'email_personal', 'numero_documento'],
+        q,
+        { take: SEARCH_BOX_LIMIT, skip: 0, where: { flag: true, id_tipo: TIPOS } }
+      );
+    }
+
     async COMBO_findAllxIdsTipo(arrayIdTipo: number[], paginationDto: PaginationDto) {
       const { show: limit, offset: page, q } = paginationDto;
       const query = this.personaRepository
@@ -293,7 +369,7 @@ export class PersonaService {
         ...dto
       } = persona;
 
-      return dto;
+      return { ...dto, avatar: await this.avatarActual(persona.uid_avatar) };
     } catch (error) {
       this.handleDBExceptions(error);
     }
@@ -312,7 +388,7 @@ export class PersonaService {
         ...dto
       } = persona;
 
-      return dto;
+      return { ...dto, avatar: await this.avatarActual(persona.uid_avatar) };
     } catch (error) {
       this.handleDBExceptions(error);
     }
