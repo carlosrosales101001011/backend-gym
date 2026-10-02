@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { CreateContactoEmergenciaDto } from './dto/create-contacto-emergencia.dto';
 import { UpdateContactoEmergenciaDto } from './dto/update-contacto-emergencia.dto';
 import { In, Repository } from 'typeorm';
@@ -59,7 +59,7 @@ export class ContactoEmergenciaService {
   async findOne(id: number) {
     const contactoEmergencia =await this.contactoEmergenciaRepository.findOneBy({id})
     if(!contactoEmergencia){
-      throw new NotFoundException(`contacto whith termino ${id} not found`)
+      throw new NotFoundException('Contacto de emergencia no encontrado')
     }
     return contactoEmergencia;
   }
@@ -72,7 +72,7 @@ export class ContactoEmergenciaService {
         ...updateContactoEmergenciaDto,
         ...labels
       })
-      if(!contactoEmergencia) throw new NotFoundException(`contactoEmergencia with id: ${id} not found`)
+      if(!contactoEmergencia) throw new NotFoundException('Contacto de emergencia no encontrado')
       await this.contactoEmergenciaRepository.save(contactoEmergencia)
       return contactoEmergencia;
     } catch (error) {
@@ -88,9 +88,11 @@ export class ContactoEmergenciaService {
   }
   
   private handleDBExceptions(error:any){
+    // Errores ya pensados (ej. 404 contacto no encontrado) salen tal cual
+    if (error instanceof HttpException) throw error;
     if(error.code === '23505')
       throw new BadRequestException(error.detail);
     this.logger.error(error);
-    throw new InternalServerErrorException('Ayuda!')
+    throw new InternalServerErrorException('No se pudo guardar el contacto de emergencia')
   } 
 }

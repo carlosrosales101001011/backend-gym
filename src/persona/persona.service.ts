@@ -138,9 +138,13 @@ export class PersonaService {
         uid_contactoEmergencia: uid_contactoemergencia.toLocaleUpperCase()
       });
       await this.personaRepository.save(persona);
+      // Identificadores de la persona creada: el front los usa para guardar lo relacionado (ej. sus contactos de emergencia)
       return {
         ok: true,
-        msg: 'creado con exito'
+        msg: 'creado con exito',
+        id: persona.id,
+        uid_comentario: persona.uid_comentario,
+        uid_contactoEmergencia: persona.uid_contactoEmergencia,
       };
     } catch (error) {
       console.log({error});
@@ -362,10 +366,9 @@ export class PersonaService {
       if (!persona) {
         throw new BadRequestException(`Persona with id ${id} and id_tipo ${id_tipo} not found`);
       }
-      // uid_comentario sí se devuelve: el perfil lo usa para cargar y agregar los comentarios de la persona
+      // uid_comentario y uid_contactoEmergencia sí se devuelven: el perfil los usa para sus comentarios y contactos de emergencia
       const {
         uid,
-        uid_contactoEmergencia,
         ...dto
       } = persona;
 
@@ -381,10 +384,9 @@ export class PersonaService {
       if (!persona) {
         throw new BadRequestException(`Persona with id ${uuid} and id_tipo ${id_tipo} not found`);
       }
-      // uid_comentario sí se devuelve: el perfil lo usa para cargar y agregar los comentarios de la persona
+      // uid_comentario y uid_contactoEmergencia sí se devuelven: el perfil los usa para sus comentarios y contactos de emergencia
       const {
         uid,
-        uid_contactoEmergencia,
         ...dto
       } = persona;
 

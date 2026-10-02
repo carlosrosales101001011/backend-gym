@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common';
 import { ContactoEmergenciaService } from './contacto-emergencia.service';
 import { CreateContactoEmergenciaDto } from './dto/create-contacto-emergencia.dto';
 import { UpdateContactoEmergenciaDto } from './dto/update-contacto-emergencia.dto';
@@ -18,18 +18,20 @@ export class ContactoEmergenciaController {
     return this.contactoEmergenciaService.findAll(paginationDto, uid_location);
   }
 
-  @Get('/:uid_location/id/:id')
-  findOne(@Param('id') id: string) {
-    return this.contactoEmergenciaService.findOne(+id);
+  // Un contacto por su id (mismo formato /id/:id que el resto del sistema)
+  @Get('/id/:id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.contactoEmergenciaService.findOne(id);
   }
 
-  @Patch('/:uid_location/id/:id')
-  update(@Param('id') id: string, @Body() updateContactoEmergenciaDto: UpdateContactoEmergenciaDto) {
-    return this.contactoEmergenciaService.update(+id, updateContactoEmergenciaDto);
+  @Patch('/id/:id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateContactoEmergenciaDto: UpdateContactoEmergenciaDto) {
+    return this.contactoEmergenciaService.update(id, updateContactoEmergenciaDto);
   }
 
-  @Delete('/:uid_location/id/:id')
-  remove(@Param('id') id: string) {
-    return this.contactoEmergenciaService.remove(+id);
+  /** Da de baja el contacto (flag = false) */
+  @Delete('/id/:id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.contactoEmergenciaService.remove(id);
   }
 }

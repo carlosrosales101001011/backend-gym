@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, ParseIntPipe } from '@nestjs/common';
 import { ComentarioService } from './comentario.service';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { UpdateComentarioDto } from './dto/update-comentario.dto';
@@ -27,13 +27,17 @@ export class ComentarioController {
     return this.comentarioService.findOne(+id);
   }
 
+  /** Edita el texto del comentario: solo su autor o un super usuario (lo valida el servicio) */
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateComentarioDto: UpdateComentarioDto) {
-    return this.comentarioService.update(+id, updateComentarioDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateComentarioDto: UpdateComentarioDto, @GetUser('id') idUser: number) {
+    return this.comentarioService.update(id, updateComentarioDto, idUser);
   }
 
+  /** Da de baja el comentario: solo su autor o un super usuario (lo valida el servicio) */
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.comentarioService.remove(+id);
+  remove(@Param('id', ParseIntPipe) id: number, @GetUser('id') idUser: number) {
+    return this.comentarioService.remove(id, idUser);
   }
 }
