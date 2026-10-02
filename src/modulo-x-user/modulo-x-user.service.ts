@@ -28,7 +28,7 @@ export class ModuloXUserService implements OnModuleInit {
 
   async findAll(iduser:number) {
     console.log({iduser}, 'modulo-x-user.service.ts');
-    const modulos =await this.ModuloXUserRepositorio.find({relations: ['modulo'], where: {id_user: iduser}});
+    const modulos =await this.ModuloXUserRepositorio.find({relations: ['modulo'], where: {id_user: iduser, flag: true}});
     console.log(modulos);
     
       return modulos;
@@ -37,7 +37,7 @@ export class ModuloXUserService implements OnModuleInit {
   async findBySeccionxModuloUser(iduser:number) {
     console.log({iduser}, 'modulo-x-user.service.ts');
     // const modulos =await this.SeccionXmoduloUserRepository.find({ where: {moduloUser: {id_user: iduser}}, relations: ['moduloUser', 'moduloUser.modulo']});
-    const modulos =await this.SeccionXmoduloUserRepository.find({ where: {moduloUser: {id_user: iduser}}, relations: {moduloUser: {modulo: true}, seccion: {entidades: true}}});
+    const modulos =await this.SeccionXmoduloUserRepository.find({ where: {moduloUser: {id_user: iduser}, flag: true}, relations: {moduloUser: {modulo: true}, seccion: {entidades: true}}});
     console.log({modulos});
     
       return modulos;

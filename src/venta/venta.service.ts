@@ -56,7 +56,7 @@ export class VentaService {
   }
 
   // Recorre TODA la tabla Venta y actualiza sus label_* a partir de los id_* que son
-  // netamente Persona (id_empl, id_cli), Terminologia (id_origen, id_tipo_comprobante)
+  // netamente Persona (id_empl, id_cli), Terminologia (id_origen, id_tipo_comprobante, id_tipo_cli)
   // y EmpresaSucursal (id_sucursal). Además recalcula montoTotal_membresia,
   // montoTotal_productos, montoPagos y montoDescuento sumando sus detalleventa_* activos.
   private async obtenerLabelsDeVentaCarcel() {
@@ -65,7 +65,7 @@ export class VentaService {
 
     const idsPersona = ventas.flatMap(venta => [venta.id_empl, venta.id_cli])
       .filter((id): id is number => id !== undefined && id !== null);
-    const idsTerminologia = ventas.flatMap(venta => [venta.id_origen, venta.id_tipo_comprobante])
+    const idsTerminologia = ventas.flatMap(venta => [venta.id_origen, venta.id_tipo_comprobante, venta.id_tipo_cli])
       .filter((id): id is number => id !== undefined && id !== null);
     const idsSucursal = ventas.map(venta => venta.id_sucursal)
       .filter((id): id is number => id !== undefined && id !== null);
@@ -108,6 +108,7 @@ export class VentaService {
       }
       if (venta.id_origen !== undefined) venta.label_origen = valorPorId.get(venta.id_origen);
       if (venta.id_tipo_comprobante !== undefined) venta.label_tipo_comprobante = valorPorId.get(venta.id_tipo_comprobante);
+      if (venta.id_tipo_cli) venta.label_tipo_cli = valorPorId.get(venta.id_tipo_cli);
       if (venta.id_sucursal !== undefined) venta.label_sucursal = sucursalPorId.get(venta.id_sucursal);
     }
 
@@ -143,8 +144,9 @@ export class VentaService {
   private async getTerminologiaLabels(dto: {
     id_origen?: number;
     id_tipo_comprobante?: number;
+    id_tipo_cli?: number;
   }) {
-    const ids = [dto.id_origen, dto.id_tipo_comprobante]
+    const ids = [dto.id_origen, dto.id_tipo_comprobante, dto.id_tipo_cli]
       .filter((id): id is number => id !== undefined && id !== null);
 
     const labels: Partial<Venta> = {};
@@ -154,7 +156,9 @@ export class VentaService {
     const valorPorId = new Map(terminologias.map(t => [t.id, t.valor]));
 
     if (dto.id_origen !== undefined) labels.label_origen = valorPorId.get(dto.id_origen);
-    if (dto.id_tipo_comprobante !== undefined) labels.label_tipo_comprobante = valorPorId.get(dto.id_tipo_comprobante);
+    // Sin tipo de comprobante (null) se limpia también su nombre
+    if (dto.id_tipo_comprobante !== undefined) labels.label_tipo_comprobante = dto.id_tipo_comprobante ? valorPorId.get(dto.id_tipo_comprobante) : null as unknown as string;
+    if (dto.id_tipo_cli !== undefined) labels.label_tipo_cli = dto.id_tipo_cli ? valorPorId.get(dto.id_tipo_cli) : '';
 
     return labels;
   }
@@ -357,6 +361,7 @@ export class VentaService {
         'label_documento_cli',
         'label_origen',
         'label_tipo_comprobante',
+        'label_tipo_cli',
         'n_comprobante',
         'label_sucursal',
         'observacion'

@@ -34,6 +34,20 @@ export class MembresiaSeguimientoService {
     // this.obtenerSeguimientoCarcel();
   }
 
+  // Los seguimientos sin asesor (columnas nuevas) lo toman de su venta
+  async onModuleInit() {
+    try {
+      await this.membresiaSeguimientoRepository.query(`
+        UPDATE s SET s.id_empl = v.id_empl, s.label_nombres_apellidos_empl = v.label_nombres_apellidos_empl
+        FROM membresia_seguimiento s
+        INNER JOIN venta v ON v.id = s.id_venta
+        WHERE s.id_empl IS NULL AND v.id_empl IS NOT NULL
+      `);
+    } catch (error) {
+      this.logger.error('No se pudo completar el asesor de membresia_seguimiento', error);
+    }
+  }
+
   // Normaliza una fecha (Date o string) a su día en UTC (ms), sin horas.
   private aDiaUTC(fecha: Date | string): number {
     const f = typeof fecha === 'string' ? new Date(fecha) : fecha;
@@ -126,6 +140,8 @@ export class MembresiaSeguimientoService {
         id_distrito_cli: persona?.id_distrito,
         label_distrito_cli: persona?.label_distrito as unknown as string,
         label_venta: ventaPorId.get(id_venta)?.n_comprobante ?? detalle.label_venta,
+        id_empl: ventaPorId.get(id_venta)?.id_empl,
+        label_nombres_apellidos_empl: ventaPorId.get(id_venta)?.label_nombres_apellidos_empl,
         id_extension_actual: (extensionActual?.id ?? null) as unknown as number,
         label_extension_actual: (extensionActual?.label_tipo_extension ?? null) as unknown as string,
         fecha_vencimiento,
@@ -162,6 +178,9 @@ export class MembresiaSeguimientoService {
     if (dto.id_venta !== undefined) {
       const venta = await this.ventaRepository.findOne({ where: { id: dto.id_venta } });
       labels.label_venta = venta?.n_comprobante;
+      // Asesor / vendedor de la venta
+      labels.id_empl = venta?.id_empl;
+      labels.label_nombres_apellidos_empl = venta?.label_nombres_apellidos_empl;
     }
 
     if (dto.id_extension_actual !== undefined) {
@@ -305,6 +324,7 @@ export class MembresiaSeguimientoService {
       MembresiaSeguimiento,
       [
         'label_nombres_apellidos_cli',
+        'label_nombres_apellidos_empl',
         'telefono_cli',
         'email_cli',
         'label_distrito_cli',

@@ -25,11 +25,17 @@ export class User {
     })
     apellidos!:string;
     
-    @Column('varchar')
-    email!:string;
+    // Opcional: se puede entrar con el usuario
+    @Column('varchar', { nullable: true })
+    email?:string;
 
-    @Column('varchar')
-    email_corporativo!:string;
+    // Nombre de usuario para iniciar sesión (además del email); único. NULL en los usuarios creados antes
+    @Column('varchar', { length: 30, nullable: true })
+    usuario?:string;
+
+    // Opcional
+    @Column('varchar', { nullable: true })
+    email_corporativo?:string;
 
     @Column('varchar', {
         length: 40,
@@ -77,6 +83,10 @@ export class User {
         default: ''
     })
     label_correoUserparent!:string;
+
+    // "Nombres Apellidos" de quien registró al usuario (id_userParent); se llena al crearlo
+    @Column('varchar', { length: 180, nullable: true })
+    label_nombres_apellidos_userParent?:string;
     
     @Column('bit', {
         default: false
@@ -99,8 +109,9 @@ export class User {
     comentarios?: Comentario[];
     @BeforeInsert()
     checkFieldsBeforeInsert(){
-        this.email = this.email.toLowerCase().trim()
-        this.email_corporativo = this.email_corporativo.toLowerCase().trim()
+        // Correos opcionales: solo se normalizan si vienen
+        this.email = this.email?.toLowerCase().trim()
+        this.email_corporativo = this.email_corporativo?.toLowerCase().trim()
     }
 
     @BeforeUpdate()

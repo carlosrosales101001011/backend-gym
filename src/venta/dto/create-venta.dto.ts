@@ -1,4 +1,4 @@
-import { IsBoolean, IsDate, IsInt, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsDate, IsInt, IsNumber, IsOptional, IsString, MaxLength } from "class-validator";
 import { Type } from "class-transformer";
 
 export class CreateVentaDto {
@@ -14,12 +14,20 @@ export class CreateVentaDto {
     id_cli?:number;
 
     @IsInt()
-    id_origen?:number; //Origen de la venta
+    @IsOptional()
+    id_tipo_cli?:number; //Tipo de cliente (terminología venta/cliente/tipo)
 
     @IsInt()
+    id_origen?:number; //Origen de la venta
+
+    // Comprobante opcional
+    @IsInt()
+    @IsOptional()
     id_tipo_comprobante?:number;
 
     @IsString()
+    @IsOptional()
+    @MaxLength(25)
     n_comprobante?:string;
 
     @IsInt()

@@ -21,9 +21,12 @@ export class JwtStrategy extends PassportStrategy( Strategy, 'jwt' ){
         console.log('JWT Strategy cargado');
     }
     async validate(payload:JwtPayload):Promise<User>{
-        const {email} = payload;
-        
-        const user = await this.userRepository.findOne({where: { email },
+        const { uuid, email } = payload;
+        // Tokens nuevos: por uuid. Tokens anteriores (solo email) siguen sirviendo hasta que venzan
+        const donde = uuid ? { uuid } : email ? { email } : null;
+        if (!donde) throw new UnauthorizedException('Token invalidado')
+
+        const user = await this.userRepository.findOne({where: donde,
             select: {
             uuid: true,
             id: true,

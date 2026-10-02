@@ -1,5 +1,6 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { IsBoolean, IsDate, IsEmail, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import { ReglasPassword } from "./reglas-password";
 
 export class CreateUserDto {
 
@@ -15,24 +16,29 @@ export class CreateUserDto {
     @IsString()
     apellidos!: string;
 
-    @IsString()
-    @IsEmail()
-    email!: string;
+    // Correos opcionales: vacío ('') se toma como no enviado
+    @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+    @IsOptional()
+    @IsEmail({}, { message: 'El correo personal no es válido' })
+    email?: string;
 
+    /** Para iniciar sesión (además del email): 3 a 30 letras, números, punto, guion o guion bajo; sin @ ni espacios */
     @IsString()
-    @IsEmail()
-    email_corporativo!: string;
+    @Matches(/^[a-zA-Z0-9._-]{3,30}$/, {
+        message: 'El usuario debe tener de 3 a 30 caracteres: letras, números, punto, guion o guion bajo (sin espacios ni @)',
+    })
+    usuario!: string;
+
+    @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+    @IsOptional()
+    @IsEmail({}, { message: 'El correo empresarial no es válido' })
+    email_corporativo?: string;
 
     @IsString()
     telefono!: string;
 
-    @IsString()
-    // @MinLength(6)
-    // @MaxLength(50)
-    // @Matches(
-    //     /(?:(?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
-    //     message: 'The password must have a Uppercase, lowercase letter and a number',
-    // })
+    // Mismas reglas que el login: si no, se podría crear un usuario que después no puede entrar
+    @ReglasPassword()
     password!: string;
 
     @IsNumber()

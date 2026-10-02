@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import { timingSafeEqual } from 'crypto';
 
 @Injectable()
 export class HashService {
@@ -14,8 +15,24 @@ export class HashService {
     });
   }
 
-  // 🔍 Comparar contraseña
+  // 🔍 Comparar contraseña (false si lo guardado no es un hash válido)
   async compare(password: string, hashed: string): Promise<boolean> {
-    return argon2.verify(hashed, password);
+    try {
+      return await argon2.verify(hashed, password);
+    } catch {
+      return false;
+    }
+  }
+
+  /** true si el valor guardado ya es un hash de argon2 (los usuarios antiguos tienen la contraseña sin cifrar) */
+  esHash(valor: string): boolean {
+    return typeof valor === 'string' && valor.startsWith('$argon2');
+  }
+
+  /** Compara dos textos en tiempo constante (para contraseñas antiguas guardadas sin cifrar) */
+  igualesSinCifrar(password: string, guardada: string): boolean {
+    const a = Buffer.from(password ?? '');
+    const b = Buffer.from(guardada ?? '');
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 }

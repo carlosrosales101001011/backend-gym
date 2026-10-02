@@ -39,6 +39,16 @@ export class Venta {
     })
     label_documento_cli?:string;
 
+    // Tipo de cliente de la venta (terminología venta/cliente/tipo: Nuevo, Renovación...)
+    @Column('int', {nullable: true})
+    id_tipo_cli?:number;
+
+    @Column('varchar', {
+        length: 180,
+        nullable: true
+    })
+    label_tipo_cli?:string;
+
     @Column('int')
     id_origen?:number; //Origen de la venta
 
@@ -47,16 +57,19 @@ export class Venta {
     })
     label_origen?:string;
 
-    @Column('int')
+    // Comprobante opcional: la venta se puede registrar sin tipo ni número
+    @Column('int', {nullable: true})
     id_tipo_comprobante?:number;
 
     @Column('varchar', {
-        length: 180
+        length: 180,
+        nullable: true
     })
     label_tipo_comprobante?:string;
 
     @Column('varchar', {
-        length: 25
+        length: 25,
+        nullable: true
     })
     n_comprobante?:string;
 

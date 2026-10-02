@@ -30,6 +30,12 @@ export class MembresiaSeguimiento {
     label_venta?: string; // VENTA.ENTITY=>[n_comprobante]
 
     @Column({ type: 'int', nullable: true })
+    id_empl?: number; // VENTA.ENTITY=>[id_empl] (asesor / vendedor)
+
+    @Column({ type: 'varchar', length: 180, nullable: true })
+    label_nombres_apellidos_empl?: string; // VENTA.ENTITY=>[label_nombres_apellidos_empl]
+
+    @Column({ type: 'int', nullable: true })
     id_extension_actual?: number; // MEMBRESIA_EXTENSION.ENTITY=>[id]
 
     @Column({ type: 'varchar', length: 150, nullable: true })

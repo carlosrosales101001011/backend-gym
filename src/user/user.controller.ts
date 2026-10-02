@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, SetMetadata, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, SetMetadata, Query, ParseIntPipe } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
+import { CambiarPasswordDto } from './dto/cambiar-password.dto';
+import { AsignarPasswordDto } from './dto/asignar-password.dto';
 import { JwtAuthGuard } from './guard/jwt-auth.guard';
 import { GetUser } from './decorator/get-user.decorator';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
@@ -42,6 +44,20 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   findMe(@GetUser('id') idUser: number) {
     return this.userService.findMe(idUser);
+  }
+
+  /** El usuario logueado cambia su contraseña (con la actual); el usuario sale del token */
+  @Patch('/me/password')
+  @UseGuards(JwtAuthGuard)
+  cambiarPassword(@GetUser('id') idUser: number, @Body() cambiarPasswordDto: CambiarPasswordDto) {
+    return this.userService.cambiarPassword(idUser, cambiarPasswordDto);
+  }
+
+  /** Asigna una contraseña nueva a otro usuario: solo quien lo creó o un super usuario (lo valida el servicio) */
+  @Patch('/id/:id/password')
+  @UseGuards(JwtAuthGuard)
+  asignarPassword(@Param('id', ParseIntPipe) id: number, @GetUser('id') idAdmin: number, @Body() asignarPasswordDto: AsignarPasswordDto) {
+    return this.userService.asignarPassword(id, idAdmin, asignarPasswordDto);
   }
 
   @Get(':id')
