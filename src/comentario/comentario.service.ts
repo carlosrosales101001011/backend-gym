@@ -4,13 +4,17 @@ import { UpdateComentarioDto } from './dto/update-comentario.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Comentario } from './entities/comentario.entity';
 import { Repository } from 'typeorm';
+import { Persona } from 'src/persona/entities/persona.entity';
+import { avataresPorPersona } from 'src/persona/avatar-persona';
 
 @Injectable()
 export class ComentarioService {
   private readonly logger = new Logger('comentarioService')
   constructor(
     @InjectRepository(Comentario)
-    private readonly comentarioRepository:Repository<Comentario>
+    private readonly comentarioRepository:Repository<Comentario>,
+    @InjectRepository(Persona)
+    private readonly personaRepository:Repository<Persona>
   ){}
   async create(createComentarioDto: CreateComentarioDto) {
     try {
@@ -37,7 +41,12 @@ export class ComentarioService {
     if(!comentarios){
       throw new NotFoundException(`comentario whith termino ${uid_location} not found`)
     }
-    return comentarios;
+    // Foto de cada autor: la de su colaborador (users.id_empl → persona)
+    const avatares = await avataresPorPersona(this.personaRepository, comentarios.map((c) => c.usuario?.id_empl));
+    return comentarios.map((comentario) => ({
+      ...comentario,
+      avatar_usuario: (comentario.usuario?.id_empl && avatares.get(comentario.usuario.id_empl)) || null,
+    }));
   }
   async findOne(id: number) {
     const comentario =await this.comentarioRepository.findOneBy({id})

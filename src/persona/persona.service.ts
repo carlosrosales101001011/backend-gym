@@ -13,7 +13,7 @@ import { In, Repository } from 'typeorm';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { BlobStorageService } from 'src/blob-storage/blob-storage.service';
 
-const AVATAR_CONTAINER = 'avatarclientes';
+const AVATAR_CONTAINER = 'avatarpersona';
 
 @Injectable()
 export class PersonaService {
@@ -362,9 +362,9 @@ export class PersonaService {
       if (!persona) {
         throw new BadRequestException(`Persona with id ${id} and id_tipo ${id_tipo} not found`);
       }
+      // uid_comentario sí se devuelve: el perfil lo usa para cargar y agregar los comentarios de la persona
       const {
         uid,
-        uid_comentario,
         uid_contactoEmergencia,
         ...dto
       } = persona;
@@ -381,9 +381,9 @@ export class PersonaService {
       if (!persona) {
         throw new BadRequestException(`Persona with id ${uuid} and id_tipo ${id_tipo} not found`);
       }
+      // uid_comentario sí se devuelve: el perfil lo usa para cargar y agregar los comentarios de la persona
       const {
         uid,
-        uid_comentario,
         uid_contactoEmergencia,
         ...dto
       } = persona;

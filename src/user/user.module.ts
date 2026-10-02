@@ -11,6 +11,7 @@ import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { HashService } from 'src/common/hash.service';
 import { JwtAuthGuard } from './guard/jwt-auth.guard';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
+import { Persona } from 'src/persona/entities/persona.entity';
 
 @Module({
   controllers: [UserController],
@@ -18,7 +19,7 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
   exports: [PassportModule, JwtModule, JwtStrategy, JwtAuthGuard],
   imports: [
     ConfigModule,
-      TypeOrmModule.forFeature([User, Terminologia]),
+      TypeOrmModule.forFeature([User, Terminologia, Persona]),
       PassportModule.register({defaultStrategy: 'jwt'}),  
       JwtModule.registerAsync({
         imports: [ConfigModule],

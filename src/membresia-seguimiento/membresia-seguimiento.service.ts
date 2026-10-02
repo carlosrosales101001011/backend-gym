@@ -257,6 +257,45 @@ export class MembresiaSeguimientoService {
     });
   }
 
+  /**
+   * Membresía actual del cliente para registrar su asistencia: la que vence más tarde, con su
+   * programa y plan (detalle de la venta) y si la venta ya está pagada. null si no tiene membresías.
+   */
+  async findResumenActualByIdCli(id_cli: number) {
+    const seguimiento = await this.membresiaSeguimientoRepository.findOne({
+      where: { id_cli, flag: true },
+      order: { fecha_vencimiento: 'DESC' },
+    });
+    if (!seguimiento) return null;
+
+    const [venta, detalle] = await Promise.all([
+      this.ventaRepository.findOne({
+        where: { id: seguimiento.id_venta },
+        select: { id: true, montoTotal_membresia: true, montoTotal_productos: true, montoPagos: true },
+      }),
+      this.detalleventaMembresiaRepository.findOne({
+        where: { id_venta: seguimiento.id_venta, flag: true },
+        select: { id: true, label_programa: true, label_plan: true, label_horario: true },
+      }),
+    ]);
+    // Mismo total que la tabla de ventas: membresías + productos (ya con descuento)
+    const montoTotal = Number(venta?.montoTotal_membresia ?? 0) + Number(venta?.montoTotal_productos ?? 0);
+    const montoPagado = Number(venta?.montoPagos ?? 0);
+
+    return {
+      id_venta: seguimiento.id_venta,
+      label_venta: seguimiento.label_venta,
+      label_programa: detalle?.label_programa ?? null,
+      label_plan: detalle?.label_plan ?? null,
+      label_horario: detalle?.label_horario ?? null,
+      fecha_vencimiento: seguimiento.fecha_vencimiento,
+      montoTotal,
+      montoPagado,
+      // Margen de medio céntimo por redondeo de decimales
+      pagado: montoPagado >= montoTotal - 0.005,
+    };
+  }
+
   async update(id: number, updateMembresiaSeguimientoDto: UpdateMembresiaSeguimientoDto) {
     const labels = await this.getLabels(updateMembresiaSeguimientoDto);
     const membresiaSeguimiento = await this.membresiaSeguimientoRepository.preload({

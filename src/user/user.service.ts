@@ -14,6 +14,8 @@ import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { v4 as uid } from 'uuid';
+import { Persona } from 'src/persona/entities/persona.entity';
+import { avataresPorPersona } from 'src/persona/avatar-persona';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger('UserService')
@@ -24,6 +26,9 @@ export class UserService {
 
     @InjectRepository(Terminologia)
     private readonly terminologiaRepository:Repository<Terminologia>,
+
+    @InjectRepository(Persona)
+    private readonly personaRepository:Repository<Persona>,
 
     private readonly jwtService:JwtService,
 
@@ -232,10 +237,13 @@ export class UserService {
   async findMe(id: number) {
     const user = await this.userRepository.findOne({
       where: { id },
-      select: { id: true, nombres: true, apellidos: true, label_rol: true, is_super_user: true },
+      select: { id: true, nombres: true, apellidos: true, label_rol: true, is_super_user: true, id_empl: true },
     });
     if (!user) throw new NotFoundException('Usuario no encontrado');
-    return user;
+    // Foto del usuario: la de su colaborador (users.id_empl → persona)
+    const avatares = await avataresPorPersona(this.personaRepository, [user.id_empl]);
+    const { id_empl, ...datos } = user;
+    return { ...datos, avatar: avatares.get(id_empl) ?? null };
   }
 
   findOne(id: number) {

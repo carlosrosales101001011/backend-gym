@@ -34,6 +34,12 @@ export class MembresiaSeguimientoController {
     return this.membresiaSeguimientoService.findAllByIdCli(id_cli);
   }
 
+  /** Membresía actual del cliente con programa, plan y si está pagada (al registrar su asistencia) */
+  @Get('/id_cli/:id_cli/resumen-actual')
+  findResumenActualByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {
+    return this.membresiaSeguimientoService.findResumenActualByIdCli(id_cli);
+  }
+
   @Get('/id/:id')
   findOne(@Param('id') id: string) {
     return this.membresiaSeguimientoService.findOne(+id);
