@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from "typeorm";
 
 @Entity({ name: 'blob_storage' })
 export class BlobStorage {
@@ -33,6 +33,10 @@ export class BlobStorage {
 
     @Column({ type: 'float', default: 1 })
     zoom?: number;
+
+    /** Cuándo se subió (los registros anteriores toman la fecha en que se agregó la columna) */
+    @CreateDateColumn()
+    createdAt?: Date;
 
     @Column('bit', {
         default: true,

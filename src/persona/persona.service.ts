@@ -54,6 +54,12 @@ export class PersonaService {
     } catch (error) {
       this.logger.error('No se pudo completar url_avatar_ultimo / encuadre de persona', error);
     }
+    // Las personas creadas antes de existir uid_archivos reciben uno (solo las que no tienen)
+    try {
+      await this.personaRepository.query(`UPDATE persona SET uid_archivos = UPPER(CONVERT(varchar(40), NEWID())) WHERE uid_archivos IS NULL`);
+    } catch (error) {
+      this.logger.error('No se pudo completar uid_archivos de persona', error);
+    }
   }
 
   // Recorre TODA la tabla Persona y actualiza sus label_* a partir de los id_*
@@ -135,7 +141,8 @@ export class PersonaService {
         id_tipo: id_tipo,
         uid: uid.toLocaleUpperCase(),
         uid_comentario: uid_comentario.toLocaleUpperCase(),
-        uid_contactoEmergencia: uid_contactoemergencia.toLocaleUpperCase()
+        uid_contactoEmergencia: uid_contactoemergencia.toLocaleUpperCase(),
+        uid_archivos: uidv4().toLocaleUpperCase()
       });
       await this.personaRepository.save(persona);
       // Identificadores de la persona creada: el front los usa para guardar lo relacionado (ej. sus contactos de emergencia)
@@ -145,6 +152,7 @@ export class PersonaService {
         id: persona.id,
         uid_comentario: persona.uid_comentario,
         uid_contactoEmergencia: persona.uid_contactoEmergencia,
+        uid_archivos: persona.uid_archivos,
       };
     } catch (error) {
       console.log({error});

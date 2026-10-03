@@ -97,7 +97,16 @@ export class FullTextSearchService {
     // Orden de parámetros: score (@0..@n), luego filtros, al final skip y take.
     const params: any[] = [];
     const scoreExpression = this.buildScore('h.txt', tokens, params);
-    const whereClause = this.buildWhere(metadata, options.where, params);
+    // Coincidencias reales: cada palabra buscada tiene que aparecer completa en alguna columna
+    // (el puntaje sigue ordenando por relevancia, pero ya no trae resultados por pedazos de palabra)
+    const todasLasPalabras = tokens.map(token => {
+      params.push(`%${token}%`);
+      return `h.txt LIKE @${params.length - 1}`;
+    });
+    const filtros = this.buildWhere(metadata, options.where, params);
+    const whereClause = filtros
+      ? `${filtros} AND ${todasLasPalabras.join(' AND ')}`
+      : `WHERE ${todasLasPalabras.join(' AND ')}`;
     const baseParams = [...params];
 
     params.push(skip);

@@ -159,6 +159,10 @@ export class Persona {
         length: 130
     })
     uid_contactoEmergencia?:string; //CONTACTO DE EMERGENCIA O CONTACTO DE REFERENCIA O CONTACTO DE REPRESENTANTE
+
+    // Ubicación de sus archivos en blob_storage (uid_location); se crea al registrar la persona
+    @Column('varchar', { length: 130, nullable: true })
+    uid_archivos?:string;
     @Column('bit', {
         default: true,
         select: false
