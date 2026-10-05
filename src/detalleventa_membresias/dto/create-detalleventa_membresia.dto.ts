@@ -5,6 +5,10 @@ export class CreateDetalleventaMembresiaDto {
     id_venta?: number;
 
     @IsNumber()
+    @IsOptional()
+    id_membresia?: number;
+
+    @IsNumber()
     id_plan?: number;
 
     @IsNumber()

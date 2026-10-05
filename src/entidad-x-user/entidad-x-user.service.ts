@@ -18,7 +18,7 @@ export class EntidadXUserService {
   
   async findxIduser(iduser:number){
     const entidades = await this.EntidadXUserRepository.find(
-      {where: {id_user: iduser, 
+      {where: {id_user: iduser, flag: true,
         id_estado_CREATE: 2014, id_estado_DELETE: 2014, id_estado_READ: 2014, id_estado_UPDATE: 2014}, relations: ['entidad']}
     )
     return entidades.map(m=>{
@@ -31,20 +31,20 @@ export class EntidadXUserService {
   
   async findAllxIduser(iduser:number){
     const entidades = await this.EntidadXUserRepository.find(
-      {where: {id_user: iduser}, relations: ['entidad']}
+      {where: {id_user: iduser, flag: true}, relations: ['entidad']}
     )
     return entidades
   }
   async findxIduserAndIdEstado(iduser:number, idEstado:number){
     const entidades = await this.EntidadXUserRepository.find(
-      {where: {id_user: iduser, 
+      {where: {id_user: iduser, flag: true,
         id_estado_CREATE: idEstado, id_estado_DELETE: idEstado, id_estado_READ: idEstado, id_estado_UPDATE: idEstado}, relations: ['entidad']}
     )
     return entidades
   }
   async findxIduserAndIdSeccion(iduser:number){
     const entidades = await this.EntidadXUserRepository.find(
-      {where: {id_user: iduser, 
+      {where: {id_user: iduser, flag: true,
         id_estado_CREATE: 2014, id_estado_DELETE: 2014, id_estado_READ: 2014, id_estado_UPDATE: 2014}, relations: ['entidad']}
     )
     return entidades.map(m=>{

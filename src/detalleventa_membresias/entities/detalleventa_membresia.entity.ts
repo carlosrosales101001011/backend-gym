@@ -44,6 +44,9 @@ export class DetalleventaMembresia {
     @Column({ type: 'varchar', length: 25, nullable: true })
     n_comprobante?: string; // VENTA.ENTITY=>[n_comprobante], derivado por id_venta=venta.id
 
+    @Column({ type: 'int', nullable: true })
+    id_membresia?: number;
+
     @Column({ type: 'int' })
     id_plan?: number;
 

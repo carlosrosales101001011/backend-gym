@@ -33,6 +33,10 @@ export class CreateVentaDto {
     @IsInt()
     id_sucursal?:number;
 
+    @IsInt()
+    @IsOptional()
+    id_membresia?:number;
+
     @IsString()
     observacion?:string;
 

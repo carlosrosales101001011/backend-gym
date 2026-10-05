@@ -70,9 +70,11 @@ export class UserController {
     return this.userService.update(+id, updateUserDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userService.remove(+id);
+  // Borrado lógico del usuario con sus módulos, secciones y permisos (quien lo registró o un super usuario)
+  @Delete('/id/:id')
+  @UseGuards(JwtAuthGuard)
+  eliminar(@Param('id', ParseIntPipe) id: number, @GetUser('id') idAdmin: number) {
+    return this.userService.eliminar(id, idAdmin);
   }
   // @Get('private')
   // @UseGuards(AuthGuard())

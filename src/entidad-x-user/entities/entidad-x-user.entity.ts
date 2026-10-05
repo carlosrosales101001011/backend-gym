@@ -23,6 +23,13 @@ export class EntidadXUser {
     @Column('int')
     id_estado_DELETE?:number;//YES, NO Y PERMISO
 
+    // Borrado lógico (ej. al eliminar el usuario); los registros existentes quedan activos
+    @Column('bit', {
+        default: true,
+        select: false
+    })
+    flag?: boolean;
+
 
     @ManyToOne(() => Terminologia, entidad => entidad.users)
     @JoinColumn({name: 'id_entidad'})

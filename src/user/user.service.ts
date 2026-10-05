@@ -3,7 +3,10 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+import { ModuloXUser } from 'src/modulo-x-user/entities/modulo-x-user.entity';
+import { SeccionXModulouser } from 'src/seccion-x-modulouser/entities/seccion-x-modulouser.entity';
+import { EntidadXUser } from 'src/entidad-x-user/entities/entidad-x-user.entity';
 import { LoginUserDto } from './dto/login-user.dto';
 import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { AsignarPasswordDto } from './dto/asignar-password.dto';
@@ -34,7 +37,9 @@ export class UserService {
 
     private readonly hashService:HashService,
 
-    private readonly fullTextSearchService: FullTextSearchService
+    private readonly fullTextSearchService: FullTextSearchService,
+
+    private readonly dataSource: DataSource,
   ){}
 
   // Los usuarios ya registrados toman el nombre de quien los registró (columna nueva)
@@ -115,7 +120,7 @@ export class UserService {
     // Con @ se busca por email; si no, por nombre de usuario
     const identificador = email.trim();
     const donde = identificador.includes('@') ? { email: identificador } : { usuario: identificador };
-    const user = await this.userRepository.findOne({where: donde, select: {id: true, email: true, password: true, uuid: true}})
+    const user = await this.userRepository.findOne({where: { ...donde, flag: true }, select: {id: true, email: true, password: true, uuid: true}})
     // Mismo mensaje si no existe el email o si la contraseña no coincide (no se revela cuál falló)
     const credencialesInvalidas = new UnauthorizedException('Credenciales no válidas')
     if (!user) throw credencialesInvalidas
@@ -179,6 +184,7 @@ export class UserService {
   async findAll(paginationDto: PaginationDto) {
     const { show, offset } = paginationDto;
     const [lista, total] = await this.userRepository.findAndCount({
+        where: { flag: true },
         take: show,
         skip: offset,
         order: {
@@ -198,6 +204,7 @@ export class UserService {
 
   if (q.trim().length===0) {
     const [lista, total] = await this.userRepository.findAndCount({
+          where: { flag: true },
           order: {
             id: 'DESC'
           },
@@ -224,7 +231,8 @@ export class UserService {
       q,
       {
         take: show,
-        skip: offset
+        skip: offset,
+        where: { flag: true }
       }
     );
     return {
@@ -254,7 +262,29 @@ export class UserService {
     return `This action updates a #${id} user`;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  /**
+   * Elimina (flag = 0) al usuario junto con sus módulos, las secciones de esos módulos y sus permisos por entidad.
+   * Solo puede quien lo registró (id_userParent) o un super usuario; nadie a sí mismo.
+   */
+  async eliminar(idUsuario: number, idAdmin: number) {
+    if (idUsuario === idAdmin) throw new ForbiddenException('No puedes eliminarte a ti mismo')
+    const [admin, usuario] = await Promise.all([
+      this.userRepository.findOne({ where: { id: idAdmin }, select: { id: true, is_super_user: true } }),
+      this.userRepository.findOne({ where: { id: idUsuario, flag: true }, select: { id: true, id_userParent: true } }),
+    ])
+    if (!usuario) throw new NotFoundException('Usuario no encontrado')
+    const puede = !!admin && (admin.is_super_user || usuario.id_userParent === admin.id)
+    if (!puede) throw new ForbiddenException('Solo quien registró a este usuario o un super usuario puede eliminarlo')
+
+    await this.dataSource.transaction(async (manager) => {
+      const modulos = await manager.find(ModuloXUser, { where: { id_user: idUsuario }, select: { id: true } })
+      if (modulos.length) {
+        await manager.update(SeccionXModulouser, { id_modulouser: In(modulos.map((m) => m.id)) }, { flag: false })
+      }
+      await manager.update(ModuloXUser, { id_user: idUsuario }, { flag: false })
+      await manager.update(EntidadXUser, { id_user: idUsuario }, { flag: false })
+      await manager.update(User, { id: idUsuario }, { flag: false })
+    })
+    return { ok: true, msg: 'Usuario eliminado' }
   }
 }

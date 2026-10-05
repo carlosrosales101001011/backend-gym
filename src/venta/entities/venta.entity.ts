@@ -82,6 +82,9 @@ export class Venta {
     })
     label_sucursal?:string;
 
+    @Column('int', {nullable: true})
+    id_membresia?:number;
+
     @Column('varchar', {
         length: 250
     })

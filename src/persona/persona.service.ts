@@ -264,6 +264,7 @@ export class PersonaService {
     const {items, total} =await this.fullTextSearchService.search(
         Persona,
         [
+          'person_code',
           'nombres',
           'apodo',
           'apellido_paterno',

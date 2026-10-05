@@ -19,6 +19,11 @@ export class Persona {
     @CreateDateColumn()
     fecha_registro?:Date; // Se asigna automáticamente al INSERT (fecha + hora)
 
+    // Fecha y hora de registro, automática al crear la persona (NOT NULL con GETDATE() por defecto:
+    // las personas que ya existían al agregar la columna toman esa fecha)
+    @CreateDateColumn()
+    createdAt?:Date;
+
     @Column('varchar', {
         length: 150,
         nullable: true

@@ -34,7 +34,7 @@ export class JwtStrategy extends PassportStrategy( Strategy, 'jwt' ){
             id_estado: true,  // 👈 tráelo explícitamente
             flag: true,
             }});
-        if(!user){
+        if(!user || !user.flag){
             throw new UnauthorizedException('Token invalidado')
         }
         // if(user.id_estado !== 1)
