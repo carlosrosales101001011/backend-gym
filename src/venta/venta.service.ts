@@ -38,7 +38,9 @@ export class VentaService {
   ){
     // Backfill puntual: recalcula los label_* y montos de TODA la data de Venta (no solo
     // el registro creado/editado). Descomentar únicamente cuando se necesite ejecutar.
-    // this.obtenerLabelsDeVentaCarcel();
+    // this.obtenerLabelsDeVentaCarcel()
+    //   .then(() => this.logger.log('obtenerLabelsDeVentaCarcel: labels de Venta actualizados'))
+    //   .catch(error => this.logger.error('obtenerLabelsDeVentaCarcel falló', error));
   }
 
   // Suma `columna` de los detalles activos (flag = 1) agrupados por id_venta.
@@ -63,27 +65,20 @@ export class VentaService {
     const ventas = await this.ventaRepository.find();
     if (ventas.length === 0) return;
 
-    const idsPersona = ventas.flatMap(venta => [venta.id_empl, venta.id_cli])
-      .filter((id): id is number => id !== undefined && id !== null);
-    const idsTerminologia = ventas.flatMap(venta => [venta.id_origen, venta.id_tipo_comprobante, venta.id_tipo_cli])
-      .filter((id): id is number => id !== undefined && id !== null);
-    const idsSucursal = ventas.map(venta => venta.id_sucursal)
-      .filter((id): id is number => id !== undefined && id !== null);
-
-    const personas = idsPersona.length
-      ? await this.personaRepository.findBy({ id: In([...new Set(idsPersona)]) })
-      : [];
-    const nombresPorId = new Map(personas.map(p => [p.id, `${p.nombres ?? ''} ${p.apellido_paterno ?? ''} ${p.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim()]));
-    const documentoPorId = new Map(personas.map(p => [p.id, `${p.label_tipo_documento}: ${p.numero_documento}`]));
-
-    const terminologias = idsTerminologia.length
-      ? await this.terminologiaRepository.findBy({ id: In([...new Set(idsTerminologia)]) })
-      : [];
+    // Se cargan las tablas completas (sin IN(ids)): SQL Server limita a 2100 parámetros por consulta.
+    const personas = await this.personaRepository.find({
+      select: ['id', 'nombres', 'apellido_paterno', 'apellido_materno', 'id_tipo_documento', 'label_tipo_documento', 'numero_documento']
+    });
+    const terminologias = await this.terminologiaRepository.find({ select: ['id', 'valor'] });
     const valorPorId = new Map(terminologias.map(t => [t.id, t.valor]));
 
-    const sucursales = idsSucursal.length
-      ? await this.empresaSucursalRepository.findBy({ id: In([...new Set(idsSucursal)]) })
-      : [];
+    const nombresPorId = new Map(personas.map(p => [p.id, `${p.nombres ?? ''} ${p.apellido_paterno ?? ''} ${p.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim()]));
+    const documentoPorId = new Map(personas.map(p => {
+      const tipoDocumento = (p.id_tipo_documento != null ? valorPorId.get(p.id_tipo_documento) : undefined) ?? p.label_tipo_documento;
+      return [p.id, `${tipoDocumento ?? ''}: ${p.numero_documento ?? ''}`];
+    }));
+
+    const sucursales = await this.empresaSucursalRepository.find({ select: ['id', 'nombre'] });
     const sucursalPorId = new Map(sucursales.map(s => [s.id, s.nombre]));
 
     const membresiasPorVenta = await this.sumarPorVenta(this.detalleventaMembresiaRepository, 'montoTotal');
@@ -98,11 +93,11 @@ export class VentaService {
       venta.montoPagos = pagosPorVenta.get(venta.id!) ?? 0;
       venta.montoDescuento = (descuentoMembresiasPorVenta.get(venta.id!) ?? 0) + (descuentoProductosPorVenta.get(venta.id!) ?? 0);
 
-      if (venta.id_empl !== undefined) {
+      if (venta.id_empl != null) {
         venta.label_nombres_apellidos_empl = nombresPorId.get(venta.id_empl);
         venta.label_documento_empl = documentoPorId.get(venta.id_empl);
       }
-      if (venta.id_cli !== undefined) {
+      if (venta.id_cli != null) {
         venta.label_nombres_apellidos_cli = nombresPorId.get(venta.id_cli);
         venta.label_documento_cli = documentoPorId.get(venta.id_cli);
       }
@@ -112,7 +107,8 @@ export class VentaService {
       if (venta.id_sucursal !== undefined) venta.label_sucursal = sucursalPorId.get(venta.id_sucursal);
     }
 
-    await this.ventaRepository.save(ventas);
+    // En bloques para no exceder el límite de parámetros de SQL Server
+    await this.ventaRepository.save(ventas, { chunk: 100 });
   }
 
   private async getPersonaLabels(dto: {
@@ -262,7 +258,7 @@ export class VentaService {
         flag: true,
       },
       order: {
-        id: 'ASC'
+        id: 'DESC'
       }
     });
 
@@ -369,7 +365,7 @@ export class VentaService {
       q,
       {
         take: show,
-        skip: offset
+        skip: offset,
       }
     );
     return {

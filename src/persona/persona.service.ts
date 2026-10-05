@@ -239,7 +239,7 @@ export class PersonaService {
               id_tipo: id_tipo,
             },
             order: {
-              id: 'ASC'
+              id: 'DESC'
             }
           });
       return {
