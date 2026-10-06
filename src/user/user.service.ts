@@ -10,6 +10,7 @@ import { EntidadXUser } from 'src/entidad-x-user/entities/entidad-x-user.entity'
 import { LoginUserDto } from './dto/login-user.dto';
 import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { AsignarPasswordDto } from './dto/asignar-password.dto';
+import { ActualizarSistemaDto } from './dto/actualizar-sistema.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { JwtService } from '@nestjs/jwt';
 import { HashService } from 'src/common/hash.service';
@@ -260,6 +261,63 @@ export class UserService {
 
   update(id: number, updateUserDto: UpdateUserDto) {
     return `This action updates a #${id} user`;
+  }
+
+  /** Id de tipo de persona "colaborador" */
+  private static readonly ID_TIPO_COLABORADOR = 1;
+
+  /**
+   * Qué puede hacer quien está logueado sobre un usuario: editar (quien lo registró o un super usuario)
+   * y marcar super usuario (solo un super usuario, y nunca sobre sí mismo).
+   */
+  private async permisosSobre(usuario: { id: number, id_userParent: number }, idAdmin: number) {
+    const admin = await this.userRepository.findOne({ where: { id: idAdmin }, select: { id: true, is_super_user: true } });
+    const puedeEditar = !!admin && (admin.is_super_user || usuario.id_userParent === admin.id);
+    const puedeMarcarSuper = puedeEditar && !!admin?.is_super_user && usuario.id !== admin.id;
+    return { puedeEditar, puedeMarcarSuper };
+  }
+
+  /**
+   * Perfil de un usuario (por su uuid): datos de sistema (nunca la contraseña), su colaborador vinculado
+   * (persona id_tipo 1, o null) y lo que puede hacer quien lo ve.
+   */
+  async perfil(uuid: string, idAdmin: number) {
+    const usuario = await this.userRepository.findOne({
+      where: { uuid, flag: true },
+      select: {
+        id: true, uuid: true, nombres: true, apellidos: true, usuario: true, email: true, email_corporativo: true,
+        telefono: true, id_rol: true, label_rol: true, id_empl: true, id_estado: true, is_super_user: true,
+        id_userParent: true, label_nombres_apellidos_userParent: true,
+      },
+    });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+    const [colaborador, permisos] = await Promise.all([
+      usuario.id_empl
+        ? this.personaRepository.findOne({ where: { id: usuario.id_empl, id_tipo: UserService.ID_TIPO_COLABORADOR, flag: true } })
+        : Promise.resolve(null),
+      this.permisosSobre(usuario, idAdmin),
+    ]);
+    return { usuario, colaborador, ...permisos };
+  }
+
+  /** Cambia super usuario, rol y colaborador vinculado de un usuario, según los permisos de quien lo hace */
+  async actualizarSistema(idUsuario: number, idAdmin: number, dto: ActualizarSistemaDto) {
+    const usuario = await this.userRepository.findOne({ where: { id: idUsuario, flag: true }, select: { id: true, id_userParent: true } });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+    const { puedeEditar, puedeMarcarSuper } = await this.permisosSobre(usuario, idAdmin);
+    if (!puedeEditar) throw new ForbiddenException('Solo quien registró a este usuario o un super usuario puede modificarlo');
+    if (dto.is_super_user !== undefined && !puedeMarcarSuper) {
+      throw new ForbiddenException('Solo un super usuario puede cambiar si otro usuario es super usuario');
+    }
+    if (dto.id_empl) {
+      const colaborador = await this.personaRepository.findOne({ where: { id: dto.id_empl, id_tipo: UserService.ID_TIPO_COLABORADOR, flag: true }, select: { id: true } });
+      if (!colaborador) throw new BadRequestException('El colaborador elegido no existe');
+    }
+
+    const labels = dto.id_rol !== undefined ? await this.getTerminologiaLabels({ id_rol: dto.id_rol }) : {};
+    if (dto.id_rol !== undefined && !labels.label_rol) throw new BadRequestException('El rol elegido no existe');
+    await this.userRepository.update(idUsuario, { ...dto, ...labels });
+    return { ok: true, msg: 'Datos de sistema actualizados' };
   }
 
   /**

@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, SetMetadata, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, SetMetadata, Query, ParseIntPipe, ParseUUIDPipe } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { AsignarPasswordDto } from './dto/asignar-password.dto';
+import { ActualizarSistemaDto } from './dto/actualizar-sistema.dto';
 import { JwtAuthGuard } from './guard/jwt-auth.guard';
 import { GetUser } from './decorator/get-user.decorator';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
@@ -58,6 +59,20 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   asignarPassword(@Param('id', ParseIntPipe) id: number, @GetUser('id') idAdmin: number, @Body() asignarPasswordDto: AsignarPasswordDto) {
     return this.userService.asignarPassword(id, idAdmin, asignarPasswordDto);
+  }
+
+  // Perfil del usuario: datos de sistema, colaborador vinculado y permisos de quien lo ve
+  @Get('/perfil/:uuid')
+  @UseGuards(JwtAuthGuard)
+  perfil(@Param('uuid', ParseUUIDPipe) uuid: string, @GetUser('id') idAdmin: number) {
+    return this.userService.perfil(uuid, idAdmin);
+  }
+
+  // Super usuario, rol y colaborador (quien lo registró o un super usuario; super usuario solo lo cambia otro super)
+  @Patch('/id/:id/sistema')
+  @UseGuards(JwtAuthGuard)
+  actualizarSistema(@Param('id', ParseIntPipe) id: number, @GetUser('id') idAdmin: number, @Body() actualizarSistemaDto: ActualizarSistemaDto) {
+    return this.userService.actualizarSistema(id, idAdmin, actualizarSistemaDto);
   }
 
   @Get(':id')

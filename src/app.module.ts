@@ -56,6 +56,7 @@ import { MembresiaSeguimientoModule } from './membresia-seguimiento/membresia-se
 import { VentasMetaModule } from './ventas-meta/ventas-meta.module';
 import { DetallemetaAsesorModule } from './detallemeta_asesor/detallemeta_asesor.module';
 import { PersonaEventosAsistenciaModule } from './persona_eventos_asistencia/persona_eventos_asistencia.module';
+import { AgendaNutricionistaModule } from './agenda-nutricionista/agenda-nutricionista.module';
 @Module({
   providers: [TasksService],
   imports: [
@@ -132,6 +133,7 @@ import { PersonaEventosAsistenciaModule } from './persona_eventos_asistencia/per
     VentasMetaModule,
     DetallemetaAsesorModule,
     PersonaEventosAsistenciaModule,
+    AgendaNutricionistaModule,
   ],
 })
 export class AppModule {}
