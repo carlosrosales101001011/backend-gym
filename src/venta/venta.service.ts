@@ -77,15 +77,22 @@ export class VentaService {
       const tipoDocumento = (p.id_tipo_documento != null ? valorPorId.get(p.id_tipo_documento) : undefined) ?? p.label_tipo_documento;
       return [p.id, `${tipoDocumento ?? ''}: ${p.numero_documento ?? ''}`];
     }));
+    console.log(`Actualizacion finalizada correcta de terminologias (${terminologias.length})`);
+    console.log(`Actualizacion finalizada correcta de personas (${personas.length})`);
 
     const sucursales = await this.empresaSucursalRepository.find({ select: ['id', 'nombre'] });
     const sucursalPorId = new Map(sucursales.map(s => [s.id, s.nombre]));
+    console.log(`Actualizacion finalizada correcta de sucursales (${sucursales.length})`);
 
     const membresiasPorVenta = await this.sumarPorVenta(this.detalleventaMembresiaRepository, 'montoTotal');
+    console.log(`Actualizacion de la sumatoria de detalleventa_membresia correcta (${membresiasPorVenta.size} ventas)`);
     const productosPorVenta = await this.sumarPorVenta(this.detalleventaProductoRepository, 'montoTotal');
+    console.log(`Actualizacion de la sumatoria de detalleventa_producto correcta (${productosPorVenta.size} ventas)`);
     const pagosPorVenta = await this.sumarPorVenta(this.detalleventaPagoRepository, 'monto');
+    console.log(`Actualizacion de la sumatoria de detalleventa_pago correcta (${pagosPorVenta.size} ventas)`);
     const descuentoMembresiasPorVenta = await this.sumarPorVenta(this.detalleventaMembresiaRepository, 'montoDescuento');
     const descuentoProductosPorVenta = await this.sumarPorVenta(this.detalleventaProductoRepository, 'montoDescuento');
+    console.log('Actualizacion de la sumatoria de descuentos (detalleventa_membresia + detalleventa_producto) correcta');
 
     for (const venta of ventas) {
       venta.montoTotal_membresia = membresiasPorVenta.get(venta.id!) ?? 0;
@@ -109,6 +116,7 @@ export class VentaService {
 
     // En bloques para no exceder el límite de parámetros de SQL Server
     await this.ventaRepository.save(ventas, { chunk: 100 });
+    console.log(`Actualizacion finalizada correcta de venta (${ventas.length} registros guardados)`);
   }
 
   private async getPersonaLabels(dto: {

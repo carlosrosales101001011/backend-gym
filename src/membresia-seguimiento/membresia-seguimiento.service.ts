@@ -31,7 +31,9 @@ export class MembresiaSeguimientoService {
   ) {
     // Backfill puntual: reconstruye TODA la data de MembresiaSeguimiento a partir de
     // detalleventa_membresia y membresia_extension. Descomentar únicamente cuando se necesite ejecutar.
-    // this.obtenerSeguimientoCarcel();
+    this.obtenerSeguimientoCarcel()
+      .then(() => this.logger.log('obtenerSeguimientoCarcel: membresia_seguimiento reconstruido'))
+      .catch(error => this.logger.error('obtenerSeguimientoCarcel falló', error));
   }
 
   // Los seguimientos sin asesor (columnas nuevas) lo toman de su venta
@@ -54,9 +56,15 @@ export class MembresiaSeguimientoService {
     return Date.UTC(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate());
   }
 
+  private nombreCompleto(persona?: Persona): string | undefined {
+    if (!persona) return undefined;
+    return `${persona.nombres ?? ''} ${persona.apellido_paterno ?? ''} ${persona.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim();
+  }
+
   // Deja membresia_seguimiento con UNA fila activa por cada venta activa que tenga
-  // detalleventa_membresia activo (flag = 1):
-  // - id_cli, id_venta y labels (persona/venta) desde el detalle.
+  // detalleventa_membresia activo (flag = 1) con fecha_fin.
+  // Prioridad para id_* y label_*: 1) venta, 2) detalleventa_membresia, 3) lo demás
+  // (persona para cliente/asesor y contacto, membresia_extension para la extensión).
   // - fecha_vencimiento = detalle.fecha_fin + SUM(dias_habiles) de sus extensiones activas
   //   (dias_habiles son días corridos, de lunes a domingo).
   // - id_extension_actual = la última extensión cuyo rango [fecha_inicio, fecha_fin] contiene hoy.
@@ -64,10 +72,12 @@ export class MembresiaSeguimientoService {
   // desactiva los seguimientos de ventas sin membresía activa o anuladas.
   // Se cargan las tablas completas (sin In(...)) para no superar el límite de 2100 parámetros de SQL Server.
   private async obtenerSeguimientoCarcel() {
+    // 1) Venta: fuente principal de cliente, asesor y comprobante
     const ventas = await this.ventaRepository.find({ where: { flag: true } });
     const ventaPorId = new Map(ventas.map(v => [v.id!, v]));
+    console.log(`Carga finalizada correcta de venta (${ventas.length})`);
 
-    // Una sola membresía por venta: se queda con el último detalle (mayor id).
+    // 2) Detalleventa_membresia: una sola membresía por venta, la última (mayor id)
     const detalles = await this.detalleventaMembresiaRepository.find({
       where: { flag: true },
       order: { id: 'ASC' }
@@ -78,7 +88,9 @@ export class MembresiaSeguimientoService {
         detallePorVenta.set(detalle.id_venta, detalle);
       }
     }
+    console.log(`Carga finalizada correcta de detalleventa_membresia (${detallePorVenta.size} ventas con membresia)`);
 
+    // 3) Lo demás: extensiones y personas
     const extensiones = await this.membresiaExtensionRepository.find({
       where: { flag: true },
       order: { id: 'ASC' }
@@ -89,9 +101,13 @@ export class MembresiaSeguimientoService {
       lista.push(extension);
       extensionesPorVenta.set(extension.id_venta!, lista);
     }
+    console.log(`Carga finalizada correcta de membresia_extension (${extensiones.length})`);
 
-    const personas = await this.personaRepository.find();
+    const personas = await this.personaRepository.find({
+      select: ['id', 'nombres', 'apellido_paterno', 'apellido_materno', 'telefono', 'email_personal', 'id_distrito', 'label_distrito']
+    });
     const personaPorId = new Map(personas.map(p => [p.id, p]));
+    console.log(`Carga finalizada correcta de personas (${personas.length})`);
 
     // Todas las filas (activas e inactivas). Por venta se reutiliza una sola: la activa de
     // menor id o, si no hay activa, la inactiva de menor id. El resto se desactiva.
@@ -115,6 +131,8 @@ export class MembresiaSeguimientoService {
     const seguimientos: MembresiaSeguimiento[] = [];
 
     for (const [id_venta, detalle] of detallePorVenta) {
+      const venta = ventaPorId.get(id_venta)!;
+
       const extensionesVenta = extensionesPorVenta.get(id_venta) ?? [];
       const diasExtension = extensionesVenta.reduce((total, e) => total + (e.dias_habiles ?? 0), 0);
       const fecha_vencimiento = new Date(this.aDiaUTC(detalle.fecha_fin!) + diasExtension * MS_POR_DIA);
@@ -125,23 +143,23 @@ export class MembresiaSeguimientoService {
           && this.aDiaUTC(e.fecha_inicio) <= hoyUTC && hoyUTC <= this.aDiaUTC(e.fecha_fin))
         .pop();
 
-      const id_cli = detalle.id_cli ?? ventaPorId.get(id_venta)?.id_cli;
-      const persona = id_cli !== undefined ? personaPorId.get(id_cli) : undefined;
+      const id_cli = venta.id_cli ?? detalle.id_cli;
+      const id_empl = venta.id_empl ?? detalle.id_empl;
+      const cliente = id_cli != null ? personaPorId.get(id_cli) : undefined;
+      const asesor = id_empl != null ? personaPorId.get(id_empl) : undefined;
 
       seguimientos.push(this.membresiaSeguimientoRepository.create({
         id: existentePorVenta.get(id_venta)?.id,
         id_venta,
         id_cli,
-        label_nombres_apellidos_cli: persona
-          ? `${persona.nombres ?? ''} ${persona.apellido_paterno ?? ''} ${persona.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim()
-          : undefined,
-        telefono_cli: persona?.telefono,
-        email_cli: persona?.email_personal,
-        id_distrito_cli: persona?.id_distrito,
-        label_distrito_cli: persona?.label_distrito as unknown as string,
-        label_venta: ventaPorId.get(id_venta)?.n_comprobante ?? detalle.label_venta,
-        id_empl: ventaPorId.get(id_venta)?.id_empl,
-        label_nombres_apellidos_empl: ventaPorId.get(id_venta)?.label_nombres_apellidos_empl,
+        label_nombres_apellidos_cli: venta.label_nombres_apellidos_cli || detalle.label_nombres_apellidos_cli || this.nombreCompleto(cliente),
+        telefono_cli: cliente?.telefono,
+        email_cli: cliente?.email_personal,
+        id_distrito_cli: cliente?.id_distrito,
+        label_distrito_cli: cliente?.label_distrito as unknown as string,
+        label_venta: venta.n_comprobante || detalle.label_venta || detalle.n_comprobante,
+        id_empl,
+        label_nombres_apellidos_empl: venta.label_nombres_apellidos_empl || detalle.label_nombres_apellidos_empl || this.nombreCompleto(asesor),
         id_extension_actual: (extensionActual?.id ?? null) as unknown as number,
         label_extension_actual: (extensionActual?.label_tipo_extension ?? null) as unknown as string,
         fecha_vencimiento,
@@ -151,10 +169,11 @@ export class MembresiaSeguimientoService {
     }
 
     await this.membresiaSeguimientoRepository.save(seguimientos, { chunk: 100 });
+    console.log(`Actualizacion finalizada correcta de membresia_seguimiento (${seguimientos.length} seguimientos activos)`);
     for (let i = 0; i < idsDesactivar.length; i += 1000) {
       await this.membresiaSeguimientoRepository.update({ id: In(idsDesactivar.slice(i, i + 1000)) }, { flag: false });
     }
-    this.logger.log(`obtenerSeguimientoCarcel: ${seguimientos.length} seguimientos activos, ${idsDesactivar.length} desactivados`);
+    console.log(`Desactivacion finalizada correcta de membresia_seguimiento (${idsDesactivar.length} desactivados)`);
   }
 
   private async getLabels(dto: {
@@ -275,7 +294,7 @@ export class MembresiaSeguimientoService {
       }),
       this.detalleventaMembresiaRepository.findOne({
         where: { id_venta: seguimiento.id_venta, flag: true },
-        select: { id: true, label_programa: true, label_plan: true, label_horario: true },
+        select: { id: true, label_programa: true, label_plan: true, label_horario: true, fecha_inicio: true },
       }),
     ]);
     // Mismo total que la tabla de ventas: membresías + productos (ya con descuento)
@@ -288,6 +307,8 @@ export class MembresiaSeguimientoService {
       label_programa: detalle?.label_programa ?? null,
       label_plan: detalle?.label_plan ?? null,
       label_horario: detalle?.label_horario ?? null,
+      // Inicio de la membresía vendida; el fin es el vencimiento del seguimiento (incluye extensiones)
+      fecha_inicio: detalle?.fecha_inicio ?? null,
       fecha_vencimiento: seguimiento.fecha_vencimiento,
       montoTotal,
       montoPagado,
