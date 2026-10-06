@@ -71,7 +71,7 @@ export class PersonaEventosAsistenciaService {
         flag: true,
       },
       order: {
-        fecha_registro: 'DESC'
+        fecha_registro: 'ASC'
       }
     });
 

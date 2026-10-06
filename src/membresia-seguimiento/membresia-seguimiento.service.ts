@@ -31,9 +31,9 @@ export class MembresiaSeguimientoService {
   ) {
     // Backfill puntual: reconstruye TODA la data de MembresiaSeguimiento a partir de
     // detalleventa_membresia y membresia_extension. Descomentar únicamente cuando se necesite ejecutar.
-    this.obtenerSeguimientoCarcel()
-      .then(() => this.logger.log('obtenerSeguimientoCarcel: membresia_seguimiento reconstruido'))
-      .catch(error => this.logger.error('obtenerSeguimientoCarcel falló', error));
+    // this.obtenerSeguimientoCarcel()
+    //   .then(() => this.logger.log('obtenerSeguimientoCarcel: membresia_seguimiento reconstruido'))
+    //   .catch(error => this.logger.error('obtenerSeguimientoCarcel falló', error));
   }
 
   // Los seguimientos sin asesor (columnas nuevas) lo toman de su venta
