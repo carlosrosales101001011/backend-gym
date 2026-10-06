@@ -80,10 +80,10 @@ export class UserService {
 
       // El login es por email o usuario: ninguno de los dos puede repetirse (el email es opcional)
       if (userData.email) {
-        const existe = await this.userRepository.exists({ where: { email: userData.email } });
+        const existe = await this.userRepository.exists({ where: { email: userData.email, flag: true } });
         if (existe) throw new BadRequestException('Ya existe un usuario con ese email');
       }
-      const usuarioTomado = await this.userRepository.exists({ where: { usuario: userData.usuario } });
+      const usuarioTomado = await this.userRepository.exists({ where: { usuario: userData.usuario, flag: true } });
       if (usuarioTomado) throw new BadRequestException('Ese nombre de usuario ya está en uso');
 
       // Se guarda solo el hash (argon2) de la contraseña enviada
