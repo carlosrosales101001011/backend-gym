@@ -33,6 +33,9 @@ export class JwtStrategy extends PassportStrategy( Strategy, 'jwt' ){
             email: true,
             id_estado: true,  // 👈 tráelo explícitamente
             flag: true,
+            // Para @UsuarioCreador: quién crea un registro (id_usercreated y su nombre)
+            nombres: true,
+            apellidos: true,
             }});
         if(!user || !user.flag){
             throw new UnauthorizedException('Token invalidado')

@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
+import { UsuarioCreador, type UsuarioCreador as Creador } from 'src/user/decorator/usuario-creador.decorator';
 import { PersonaEventosAsistenciaService } from './persona_eventos_asistencia.service';
 import { CreatePersonaEventosAsistenciaDto } from './dto/create-persona_eventos_asistencia.dto';
 import { UpdatePersonaEventosAsistenciaDto } from './dto/update-persona_eventos_asistencia.dto';
@@ -8,9 +10,11 @@ import { PaginationDto } from 'src/common/dtos/pagination.dto';
 export class PersonaEventosAsistenciaController {
   constructor(private readonly personaEventosAsistenciaService: PersonaEventosAsistenciaService) {}
 
+  // Quien registra sale del guard: id_usercreated y label_nombres_apellidos_usercreated
   @Post()
-  create(@Body() createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto) {
-    return this.personaEventosAsistenciaService.create(createPersonaEventosAsistenciaDto);
+  @UseGuards(JwtAuthGuard)
+  create(@Body() createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, @UsuarioCreador() creador: Creador) {
+    return this.personaEventosAsistenciaService.create(createPersonaEventosAsistenciaDto, creador);
   }
 
   @Get()

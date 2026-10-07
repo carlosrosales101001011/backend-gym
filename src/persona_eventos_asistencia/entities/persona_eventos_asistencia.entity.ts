@@ -23,6 +23,13 @@ export class PersonaEventosAsistencia {
     @Column({ type: 'datetime2' })
     fecha_registro?: Date; // fecha + hora; la pone el backend al crear (no se envía)
 
+    // Quién registró la asistencia: el usuario del token al crear (no se envía). NULL en las registradas antes
+    @Column({ type: 'int', nullable: true })
+    id_usercreated?: number; // USER.ENTITY=>[id]
+
+    @Column({ type: 'varchar', length: 180, nullable: true })
+    label_nombres_apellidos_usercreated?: string; // USER.ENTITY=>[nombres, apellidos]
+
     @Column('bit', {
         default: true,
         select: false

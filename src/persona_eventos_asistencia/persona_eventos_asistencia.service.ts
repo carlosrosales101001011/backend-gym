@@ -8,6 +8,7 @@ import { Persona } from 'src/persona/entities/persona.entity';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
+import type { UsuarioCreador } from 'src/user/decorator/usuario-creador.decorator';
 
 @Injectable()
 export class PersonaEventosAsistenciaService {
@@ -43,12 +44,14 @@ export class PersonaEventosAsistenciaService {
     return labels;
   }
 
-  async create(createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto) {
+  /** creador: usuario logueado que registra la asistencia (lo entrega el guard con @UsuarioCreador) */
+  async create(createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, creador: UsuarioCreador) {
     try {
       const labels = await this.getLabels(createPersonaEventosAsistenciaDto);
       const evento = this.personaEventosAsistenciaRepository.create({
         ...createPersonaEventosAsistenciaDto,
         ...labels,
+        ...creador,
         // Momento del registro: fecha y hora actuales del servidor
         fecha_registro: new Date(),
       })
@@ -125,7 +128,8 @@ export class PersonaEventosAsistenciaService {
       [
         'label_nombres_apellidos_persona',
         'label_tipo_evento',
-        'deviceSN'
+        'deviceSN',
+        'label_nombres_apellidos_usercreated'
       ],
       q,
       {
