@@ -66,8 +66,9 @@ export class User {
     })
     id_empl!: number;
 
+    // 1 = activo (por defecto: un usuario nuevo nace activo), 0 = inactivo
     @Column('int', {
-        default: 0,
+        default: 1,
     })
     id_estado!: number;
 
