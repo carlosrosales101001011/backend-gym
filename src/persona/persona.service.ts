@@ -9,7 +9,7 @@ import { Logger, NotFoundException } from '@nestjs/common';
 import { Persona } from './entities/persona.entity';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { Ubigeo } from 'src/ubigeo/entities/ubigeo.entity';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { BlobStorageService } from 'src/blob-storage/blob-storage.service';
 
@@ -385,6 +385,26 @@ export class PersonaService {
     } catch (error) {
       this.handleDBExceptions(error);
     }
+  }
+
+  /**
+   * ¿Ya hay una persona de este tipo con ese tipo y número de documento? (ej. al agregar un cliente)
+   * excluirId: al editar, la propia persona no cuenta como repetida.
+   */
+  async existeDocumento(id_tipo: number, id_tipo_documento: number, numero_documento: string, excluirId?: number) {
+    const numero = (numero_documento ?? '').trim();
+    if (!numero || !id_tipo_documento) return { existe: false, persona: null };
+    const persona = await this.personaRepository.findOne({
+      where: {
+        id_tipo,
+        id_tipo_documento,
+        numero_documento: numero,
+        flag: true,
+        ...(excluirId ? { id: Not(excluirId) } : {}),
+      },
+      select: { id: true, uid: true, nombres: true, apellido_paterno: true, apellido_materno: true },
+    });
+    return { existe: !!persona, persona: persona ?? null };
   }
 
   async findOneByUid(id_tipo: number, uuid: string) {

@@ -24,6 +24,11 @@ export interface FullTextSearchOptions {
    */
   where?: Record<string, FullTextSearchWhereValue | undefined>;
   /**
+   * Rango de fechas por columna, comparando solo la fecha (yyyy-mm-dd, ambos inclusive; sin valor = sin límite).
+   * Ej: { fecha_registro: { desde: '2026-10-01', hasta: '2026-10-08' } }
+   */
+  rangosFecha?: Record<string, { desde?: string; hasta?: string }>;
+  /**
    * Columnas pedidas por el front ("Buscar en columnas"). Por defecto salen de ?columnas= de la request.
    * Solo se usan las que también están en `columns` (la lista permitida del servicio).
    */
@@ -103,7 +108,7 @@ export class FullTextSearchService {
       params.push(`%${token}%`);
       return `h.txt LIKE @${params.length - 1}`;
     });
-    const filtros = this.buildWhere(metadata, options.where, params);
+    const filtros = this.buildWhere(metadata, options.where, params, options.rangosFecha);
     const whereClause = filtros
       ? `${filtros} AND ${todasLasPalabras.join(' AND ')}`
       : `WHERE ${todasLasPalabras.join(' AND ')}`;
@@ -200,8 +205,25 @@ export class FullTextSearchService {
     metadata: EntityMetadata,
     where: FullTextSearchOptions['where'],
     params: any[],
+    rangosFecha?: FullTextSearchOptions['rangosFecha'],
   ): string {
     const conditions: string[] = [];
+
+    for (const [property, { desde, hasta }] of Object.entries(rangosFecha ?? {})) {
+      const column = metadata.columns.find(col => col.propertyName === property);
+      if (!column) {
+        throw new Error(`Columna de rango inválida: ${property}`);
+      }
+      const fechaSql = `CAST(a.[${column.databaseName}] AS date)`;
+      if (desde) {
+        params.push(desde);
+        conditions.push(`${fechaSql} >= @${params.length - 1}`);
+      }
+      if (hasta) {
+        params.push(hasta);
+        conditions.push(`${fechaSql} <= @${params.length - 1}`);
+      }
+    }
 
     for (const [property, value] of Object.entries(where ?? {})) {
       if (value === undefined) continue;

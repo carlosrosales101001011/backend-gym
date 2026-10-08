@@ -266,7 +266,7 @@ export class VentaService {
         flag: true,
       },
       order: {
-        id: 'DESC'
+        fecha_venta: 'DESC'
       }
     });
 

@@ -5,6 +5,8 @@ import { PersonaEventosAsistenciaService } from './persona_eventos_asistencia.se
 import { CreatePersonaEventosAsistenciaDto } from './dto/create-persona_eventos_asistencia.dto';
 import { UpdatePersonaEventosAsistenciaDto } from './dto/update-persona_eventos_asistencia.dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { BuscarAsistenciasDto } from './dto/buscar-asistencias.dto';
+import { ReporteAsistenciaClientesDto } from './dto/reporte-asistencia-clientes.dto';
 
 @Controller('persona-eventos-asistencia')
 export class PersonaEventosAsistenciaController {
@@ -22,10 +24,29 @@ export class PersonaEventosAsistenciaController {
     return this.personaEventosAsistenciaService.findAll(paginationDto);
   }
 
+  // Resumen de Gestión de asistencia: clientes y colaboradores que asistieron y clientes sin asistir en el rango
+  @Get('/resumen')
+  resumen(@Query() filtros: ReporteAsistenciaClientesDto) {
+    return this.personaEventosAsistenciaService.resumen(filtros);
+  }
+
+  // Resumen del reporte: clientes con membresía vigente en el rango (del programa) que no asistieron
+  @Get('/reporte-clientes/resumen')
+  resumenReporteClientes(@Query() filtros: ReporteAsistenciaClientesDto) {
+    return this.personaEventosAsistenciaService.resumenReporteClientes(filtros);
+  }
+
+  // Reporte: asistencias de clientes con el programa y horario de su membresía (seguimiento)
+  @Get('/reporte-clientes')
+  reporteClientes(@Query() filtros: ReporteAsistenciaClientesDto) {
+    return this.personaEventosAsistenciaService.reporteClientes(filtros);
+  }
+
+  // Búsqueda paginada; ?fecha_inicio=&fecha_fin= (yyyy-mm-dd) filtra por la fecha de registro
   @Get('/search')
-  async search(@Query() paginationDto: PaginationDto) {
-    const { q } = paginationDto;
-    const { items, total } = await this.personaEventosAsistenciaService.findSearch(q as string, paginationDto);
+  async search(@Query() buscarAsistenciasDto: BuscarAsistenciasDto) {
+    const { q } = buscarAsistenciasDto;
+    const { items, total } = await this.personaEventosAsistenciaService.findSearch(q as string, buscarAsistenciasDto);
     return {
       items,
       total

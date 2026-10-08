@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile, ParseIntPipe } from '@nestjs/common';
 import { PersonaService } from './persona.service';
 import { CreatePersonaDto } from './dto/create-persona.dto';
 import { UpdatePersonaDto } from './dto/update-persona.dto';
@@ -64,6 +64,17 @@ export class PersonaController {
   @Get('/id_tipo/:id_tipo/id/:id')
   findOne(@Param('id_tipo') id_tipo: number, @Param('id') id: string) {
     return this.personaService.findOne(id_tipo, +id);
+  }
+
+  /** ¿Ya existe una persona de este tipo con ese documento? ?id_tipo_documento=&numero_documento=&excluir_id= */
+  @Get('/id_tipo/:id_tipo/documento')
+  existeDocumento(
+    @Param('id_tipo', ParseIntPipe) id_tipo: number,
+    @Query('id_tipo_documento') idTipoDocumento: string,
+    @Query('numero_documento') numeroDocumento: string,
+    @Query('excluir_id') excluirId?: string,
+  ) {
+    return this.personaService.existeDocumento(id_tipo, Number(idTipoDocumento), numeroDocumento, excluirId ? Number(excluirId) : undefined);
   }
 
   @Get('/id_tipo/:id_tipo/uid/:uid')
