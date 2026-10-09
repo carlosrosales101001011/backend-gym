@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common';
 import { MembresiaExtensionService } from './membresia_extension.service';
 import { CreateMembresiaExtensionDto } from './dto/create-membresia_extension.dto';
 import { UpdateMembresiaExtensionDto } from './dto/update-membresia_extension.dto';
@@ -26,6 +26,12 @@ export class MembresiaExtensionController {
       items,
       total
     };
+  }
+
+  /** Extensiones activas de una venta (congelamientos y regalos), la más reciente primero */
+  @Get('/id_venta/:id_venta')
+  findByIdVenta(@Param('id_venta', ParseIntPipe) id_venta: number) {
+    return this.membresiaExtensionService.findByIdVenta(id_venta);
   }
 
   @Get('/id/:id')

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { CreateMembresiaSeguimientoDto } from './dto/create-membresia-seguimiento.dto';
@@ -16,6 +16,11 @@ const MS_POR_DIA = 24 * 60 * 60 * 1000;
 @Injectable()
 export class MembresiaSeguimientoService {
   private readonly logger = new Logger('MembresiaSeguimientoService')
+  /** TERMINOLOGIA: tipo de extensión "Congelamiento" (grupo extension) y estado de cita "Atendido" (grupo cita) */
+  private static readonly ID_EXTENSION_CONGELAMIENTO = 6089;
+  private static readonly ID_EXTENSION_REGALO = 6090;
+  private static readonly ID_CITA_ATENDIDA = 6123;
+
   constructor(
     @InjectRepository(MembresiaSeguimiento)
     private readonly membresiaSeguimientoRepository: Repository<MembresiaSeguimiento>,
@@ -63,11 +68,7 @@ export class MembresiaSeguimientoService {
 
   // Deja membresia_seguimiento con UNA fila activa por cada venta activa que tenga
   // detalleventa_membresia activo (flag = 1) con fecha_fin.
-  // Prioridad para id_* y label_*: 1) venta, 2) detalleventa_membresia, 3) lo demás
-  // (persona para cliente/asesor y contacto, membresia_extension para la extensión).
-  // - fecha_vencimiento = detalle.fecha_fin + SUM(dias_habiles) de sus extensiones activas
-  //   (dias_habiles son días corridos, de lunes a domingo).
-  // - id_extension_actual = la última extensión cuyo rango [fecha_inicio, fecha_fin] contiene hoy.
+  // Cada fila se arma con armarSeguimiento (prioridad de labels, fecha_vencimiento y extensión actual).
   // Reutiliza la fila existente de la venta (aunque esté inactiva), desactiva duplicados y
   // desactiva los seguimientos de ventas sin membresía activa o anuladas.
   // Se cargan las tablas completas (sin In(...)) para no superar el límite de 2100 parámetros de SQL Server.
@@ -127,44 +128,25 @@ export class MembresiaSeguimientoService {
       .filter(e => e.flag && !idsReutilizados.has(e.id!))
       .map(e => e.id!);
 
+    const citasPorCliente = await this.citasAtendidasPorCliente();
+    console.log(`Carga finalizada correcta de citas de nutricion atendidas (${citasPorCliente.size} clientes)`);
+
     const hoyUTC = this.aDiaUTC(new Date());
     const seguimientos: MembresiaSeguimiento[] = [];
 
     for (const [id_venta, detalle] of detallePorVenta) {
       const venta = ventaPorId.get(id_venta)!;
-
-      const extensionesVenta = extensionesPorVenta.get(id_venta) ?? [];
-      const diasExtension = extensionesVenta.reduce((total, e) => total + (e.dias_habiles ?? 0), 0);
-      const fecha_vencimiento = new Date(this.aDiaUTC(detalle.fecha_fin!) + diasExtension * MS_POR_DIA);
-
-      // Ordenadas por id ASC: la última que cumpla es la extensión actual.
-      const extensionActual = extensionesVenta
-        .filter(e => e.fecha_inicio && e.fecha_fin
-          && this.aDiaUTC(e.fecha_inicio) <= hoyUTC && hoyUTC <= this.aDiaUTC(e.fecha_fin))
-        .pop();
-
       const id_cli = venta.id_cli ?? detalle.id_cli;
       const id_empl = venta.id_empl ?? detalle.id_empl;
-      const cliente = id_cli != null ? personaPorId.get(id_cli) : undefined;
-      const asesor = id_empl != null ? personaPorId.get(id_empl) : undefined;
-
-      seguimientos.push(this.membresiaSeguimientoRepository.create({
-        id: existentePorVenta.get(id_venta)?.id,
-        id_venta,
-        id_cli,
-        label_nombres_apellidos_cli: venta.label_nombres_apellidos_cli || detalle.label_nombres_apellidos_cli || this.nombreCompleto(cliente),
-        telefono_cli: cliente?.telefono,
-        email_cli: cliente?.email_personal,
-        id_distrito_cli: cliente?.id_distrito,
-        label_distrito_cli: cliente?.label_distrito as unknown as string,
-        label_venta: venta.n_comprobante || detalle.label_venta || detalle.n_comprobante,
-        id_empl,
-        label_nombres_apellidos_empl: venta.label_nombres_apellidos_empl || detalle.label_nombres_apellidos_empl || this.nombreCompleto(asesor),
-        id_extension_actual: (extensionActual?.id ?? null) as unknown as number,
-        label_extension_actual: (extensionActual?.label_tipo_extension ?? null) as unknown as string,
-        fecha_vencimiento,
-        sesiones_pendientes: this.calcularSesionesPendientes(fecha_vencimiento),
-        flag: true,
+      seguimientos.push(this.armarSeguimiento({
+        venta,
+        detalle,
+        extensionesVenta: extensionesPorVenta.get(id_venta) ?? [],
+        cliente: id_cli != null ? personaPorId.get(id_cli) : undefined,
+        asesor: id_empl != null ? personaPorId.get(id_empl) : undefined,
+        idExistente: existentePorVenta.get(id_venta)?.id,
+        citasAtendidas: id_cli != null ? citasPorCliente.get(id_cli) ?? [] : [],
+        hoyUTC,
       }));
     }
 
@@ -174,6 +156,141 @@ export class MembresiaSeguimientoService {
       await this.membresiaSeguimientoRepository.update({ id: In(idsDesactivar.slice(i, i + 1000)) }, { flag: false });
     }
     console.log(`Desactivacion finalizada correcta de membresia_seguimiento (${idsDesactivar.length} desactivados)`);
+  }
+
+  /**
+   * Fila de membresia_seguimiento de una venta (sin guardar). Misma regla para el proceso masivo y el de una venta:
+   * - Prioridad para id_* y label_*: 1) venta, 2) detalleventa_membresia, 3) persona (cliente / asesor).
+   * - fecha_vencimiento = detalle.fecha_fin + SUM(dias_habiles) de sus extensiones activas (días corridos).
+   * - id_extension_actual = la última extensión (por id) cuyo rango [fecha_inicio, fecha_fin] contiene hoy.
+   * - Disponibles (solo si está vigente: vence hoy o después; si no, 0. Nunca negativos):
+   *   dias_congelamiento_disponibles = detalle.dias_congelamiento_regalo - SUM(dias_habiles) de sus extensiones "Congelamiento";
+   *   sesiones_nutricion_disponibles = detalle.citas_nutricion_regalo - citas "Atendido" del cliente entre
+   *   detalle.fecha_inicio y fecha_vencimiento.
+   */
+  private armarSeguimiento({ venta, detalle, extensionesVenta, cliente, asesor, idExistente, citasAtendidas, hoyUTC }: {
+    venta: Venta;
+    detalle: DetalleventaMembresia;
+    /** Extensiones activas de la venta, ordenadas por id ASC */
+    extensionesVenta: MembresiaExtension[];
+    cliente?: Persona;
+    asesor?: Persona;
+    /** Fila existente a reutilizar (si no hay, se crea una nueva) */
+    idExistente?: number;
+    /** Fechas (día UTC en ms) de las citas de nutrición "Atendido" del cliente */
+    citasAtendidas: number[];
+    hoyUTC: number;
+  }): MembresiaSeguimiento {
+    const diasExtension = extensionesVenta.reduce((total, e) => total + (e.dias_habiles ?? 0), 0);
+    const fecha_vencimiento = new Date(this.aDiaUTC(detalle.fecha_fin!) + diasExtension * MS_POR_DIA);
+    const vencimientoUTC = fecha_vencimiento.getTime();
+    const vigente = vencimientoUTC >= hoyUTC;
+
+    const diasCongelados = extensionesVenta
+      .filter(e => e.id_tipo_extension === MembresiaSeguimientoService.ID_EXTENSION_CONGELAMIENTO)
+      .reduce((total, e) => total + (e.dias_habiles ?? 0), 0);
+    const inicioUTC = detalle.fecha_inicio ? this.aDiaUTC(detalle.fecha_inicio) : -Infinity;
+    const citasUsadas = citasAtendidas.filter(dia => dia >= inicioUTC && dia <= vencimientoUTC).length;
+
+    // Ordenadas por id ASC: la última que cumpla es la extensión actual.
+    const extensionActual = extensionesVenta
+      .filter(e => e.fecha_inicio && e.fecha_fin
+        && this.aDiaUTC(e.fecha_inicio) <= hoyUTC && hoyUTC <= this.aDiaUTC(e.fecha_fin))
+      .pop();
+
+    return this.membresiaSeguimientoRepository.create({
+      id: idExistente,
+      id_venta: venta.id,
+      id_cli: venta.id_cli ?? detalle.id_cli,
+      label_nombres_apellidos_cli: venta.label_nombres_apellidos_cli || detalle.label_nombres_apellidos_cli || this.nombreCompleto(cliente),
+      telefono_cli: cliente?.telefono,
+      email_cli: cliente?.email_personal,
+      id_distrito_cli: cliente?.id_distrito,
+      label_distrito_cli: cliente?.label_distrito as unknown as string,
+      label_venta: venta.n_comprobante || detalle.label_venta || detalle.n_comprobante,
+      id_empl: venta.id_empl ?? detalle.id_empl,
+      label_nombres_apellidos_empl: venta.label_nombres_apellidos_empl || detalle.label_nombres_apellidos_empl || this.nombreCompleto(asesor),
+      id_extension_actual: (extensionActual?.id ?? null) as unknown as number,
+      label_extension_actual: (extensionActual?.label_tipo_extension ?? null) as unknown as string,
+      fecha_vencimiento,
+      sesiones_pendientes: this.calcularSesionesPendientes(fecha_vencimiento),
+      dias_congelamiento_disponibles: vigente ? Math.max(0, (detalle.dias_congelamiento_regalo ?? 0) - diasCongelados) : 0,
+      sesiones_nutricion_disponibles: vigente ? Math.max(0, (detalle.citas_nutricion_regalo ?? 0) - citasUsadas) : 0,
+      flag: true,
+    });
+  }
+
+  /** Citas de nutrición "Atendido" (activas) por cliente: fechas como día UTC en ms. Con id_cli, solo las de ese cliente */
+  private async citasAtendidasPorCliente(id_cli?: number): Promise<Map<number, number[]>> {
+    const params: number[] = [MembresiaSeguimientoService.ID_CITA_ATENDIDA];
+    if (id_cli != null) params.push(id_cli);
+    const filas: { id_cli: number, fecha: string }[] = await this.membresiaSeguimientoRepository.query(`
+      SELECT id_cli, CONVERT(varchar(10), fecha, 23) AS fecha
+      FROM agenda_nutricionista
+      WHERE flag = 1 AND id_estado = @0${id_cli != null ? ' AND id_cli = @1' : ''}
+    `, params);
+    const porCliente = new Map<number, number[]>();
+    for (const { id_cli: cliente, fecha } of filas) {
+      const lista = porCliente.get(cliente) ?? [];
+      lista.push(this.aDiaUTC(`${fecha}T00:00:00Z`));
+      porCliente.set(cliente, lista);
+    }
+    return porCliente;
+  }
+
+  /**
+   * Recalcula y guarda el seguimiento de UNA membresía vendida (detalleventa_membresia.id), con la misma regla que
+   * obtenerSeguimientoCarcel: reutiliza la fila de su venta (la activa de menor id o, si no hay, la inactiva de
+   * menor id) y desactiva las demás filas activas de esa venta. Devuelve el seguimiento guardado.
+   */
+  async actualizarSeguimientoPorMembresia(id_membresia: number): Promise<MembresiaSeguimiento> {
+    const detalle = await this.detalleventaMembresiaRepository.findOne({ where: { id: id_membresia, flag: true } });
+    if (!detalle) throw new NotFoundException(`No existe la membresía vendida ${id_membresia}`);
+    if (!detalle.fecha_fin) throw new BadRequestException(`La membresía vendida ${id_membresia} no tiene fecha fin`);
+
+    const venta = await this.ventaRepository.findOne({ where: { id: detalle.id_venta, flag: true } });
+    if (!venta) throw new NotFoundException(`La venta ${detalle.id_venta} de la membresía ${id_membresia} no existe o está anulada`);
+
+    const id_cli = venta.id_cli ?? detalle.id_cli;
+    const id_empl = venta.id_empl ?? detalle.id_empl;
+    const selectPersona: (keyof Persona)[] = ['id', 'nombres', 'apellido_paterno', 'apellido_materno', 'telefono', 'email_personal', 'id_distrito', 'label_distrito'];
+    const [extensionesVenta, cliente, asesor, existentes, citasPorCliente] = await Promise.all([
+      this.membresiaExtensionRepository.find({ where: { id_venta: venta.id, flag: true }, order: { id: 'ASC' } }),
+      id_cli != null ? this.personaRepository.findOne({ select: selectPersona, where: { id: id_cli } }) : null,
+      id_empl != null ? this.personaRepository.findOne({ select: selectPersona, where: { id: id_empl } }) : null,
+      this.membresiaSeguimientoRepository.find({ select: { id: true, flag: true }, where: { id_venta: venta.id }, order: { id: 'ASC' } }),
+      id_cli != null ? this.citasAtendidasPorCliente(id_cli) : new Map<number, number[]>(),
+    ]);
+
+    const reutilizada = existentes.find(e => e.flag) ?? existentes[0];
+    const seguimiento = await this.membresiaSeguimientoRepository.save(this.armarSeguimiento({
+      venta,
+      detalle,
+      extensionesVenta,
+      cliente: cliente ?? undefined,
+      asesor: asesor ?? undefined,
+      idExistente: reutilizada?.id,
+      citasAtendidas: id_cli != null ? citasPorCliente.get(id_cli) ?? [] : [],
+      hoyUTC: this.aDiaUTC(new Date()),
+    }));
+
+    const idsDesactivar = existentes.filter(e => e.flag && e.id !== seguimiento.id).map(e => e.id!);
+    if (idsDesactivar.length) await this.membresiaSeguimientoRepository.update({ id: In(idsDesactivar) }, { flag: false });
+    return seguimiento;
+  }
+
+  /**
+   * Recalcula el seguimiento de una venta con su membresía vendida activa (la de mayor id, como el proceso masivo).
+   * Devuelve null si la venta no tiene membresía con fecha fin (no hay seguimiento que actualizar).
+   */
+  async actualizarSeguimientoPorVenta(id_venta: number): Promise<MembresiaSeguimiento | null> {
+    const detalle = await this.detalleventaMembresiaRepository.findOne({
+      select: { id: true, fecha_fin: true },
+      where: { id_venta, flag: true },
+      order: { id: 'DESC' },
+    });
+    if (!detalle?.fecha_fin) return null;
+    return this.actualizarSeguimientoPorMembresia(detalle.id!);
   }
 
   private async getLabels(dto: {
@@ -280,6 +397,58 @@ export class MembresiaSeguimientoService {
    * Membresía actual del cliente para registrar su asistencia: la que vence más tarde, con su
    * programa y plan (detalle de la venta) y si la venta ya está pagada. null si no tiene membresías.
    */
+  /**
+   * Membresías (seguimientos activos) del cliente con el detalle de su venta: programa, plan, horario, fecha de inicio
+   * y vencimiento. Congelamiento y citas de nutrición: regalados por el plan y disponibles guardados en el seguimiento
+   * (dias_congelamiento_disponibles / sesiones_nutricion_disponibles, ver armarSeguimiento). dias_congelados y
+   * dias_regalo: días de las extensiones "Congelamiento" y "Regalo" de la venta. citas_atendidas: citas "Atendido"
+   * del cliente entre el inicio y el vencimiento de la membresía.
+   * dias_regalo: días de las extensiones "Regalo" de esa venta.
+   */
+  async findDetalleByIdCli(id_cli: number) {
+    return this.membresiaSeguimientoRepository.query(`
+      SELECT
+        s.id, s.id_cli, s.id_venta, s.label_venta, s.label_extension_actual, s.sesiones_pendientes,
+        CONVERT(varchar(10), s.fecha_vencimiento, 23) AS fecha_vencimiento,
+        d.label_programa, d.label_plan, d.label_horario,
+        CONVERT(varchar(10), d.fecha_inicio, 23) AS fecha_inicio,
+        ISNULL(d.dias_congelamiento_regalo, 0) AS congelamiento_regalados,
+        s.dias_congelamiento_disponibles AS congelamiento_disponibles,
+        ISNULL(cg.dias, 0) AS dias_congelados,
+        ISNULL(d.citas_nutricion_regalo, 0) AS citas_regaladas,
+        s.sesiones_nutricion_disponibles AS citas_disponibles,
+        ISNULL(ct.citas, 0) AS citas_atendidas,
+        ISNULL(rg.dias, 0) AS dias_regalo
+      FROM membresia_seguimiento s
+      OUTER APPLY (
+        SELECT TOP 1 dm.label_programa, dm.label_plan, dm.label_horario, dm.fecha_inicio,
+          dm.dias_congelamiento_regalo, dm.citas_nutricion_regalo
+        FROM detalleventa_membresia dm
+        WHERE dm.id_venta = s.id_venta AND dm.flag = 1
+        ORDER BY dm.id DESC
+      ) d
+      OUTER APPLY (
+        SELECT SUM(e.dias_habiles) AS dias
+        FROM membresia_extension e
+        WHERE e.id_venta = s.id_venta AND e.flag = 1 AND e.id_tipo_extension = @1
+      ) cg
+      OUTER APPLY (
+        SELECT SUM(e.dias_habiles) AS dias
+        FROM membresia_extension e
+        WHERE e.id_venta = s.id_venta AND e.flag = 1 AND e.id_tipo_extension = @2
+      ) rg
+      OUTER APPLY (
+        SELECT COUNT(*) AS citas
+        FROM agenda_nutricionista c
+        WHERE c.id_cli = s.id_cli AND c.flag = 1 AND c.id_estado = @3
+          AND c.fecha >= ISNULL(d.fecha_inicio, '19000101') AND c.fecha <= s.fecha_vencimiento
+      ) ct
+      WHERE s.id_cli = @0 AND s.flag = 1
+    `, [id_cli, MembresiaSeguimientoService.ID_EXTENSION_CONGELAMIENTO, MembresiaSeguimientoService.ID_EXTENSION_REGALO,
+      MembresiaSeguimientoService.ID_CITA_ATENDIDA]);
+  }
+
+
   async findResumenActualByIdCli(id_cli: number) {
     const seguimiento = await this.membresiaSeguimientoRepository.findOne({
       where: { id_cli, flag: true },

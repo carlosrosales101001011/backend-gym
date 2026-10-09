@@ -34,6 +34,12 @@ export class MembresiaSeguimientoController {
     return this.membresiaSeguimientoService.findAllByIdCli(id_cli);
   }
 
+  /** Membresías del cliente con programa, plan, horario, fechas y congelamiento / citas de nutrición (perfil del cliente) */
+  @Get('/id_cli/:id_cli/detalle')
+  findDetalleByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {
+    return this.membresiaSeguimientoService.findDetalleByIdCli(id_cli);
+  }
+
   /** Membresía actual del cliente con programa, plan y si está pagada (al registrar su asistencia) */
   @Get('/id_cli/:id_cli/resumen-actual')
   findResumenActualByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {

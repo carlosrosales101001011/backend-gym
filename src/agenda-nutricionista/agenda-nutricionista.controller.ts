@@ -23,6 +23,12 @@ export class AgendaNutricionistaController {
     return this.agendaNutricionistaService.findSearch(paginationDto.q as string, paginationDto);
   }
 
+  /** Citas activas de un cliente, la más reciente primero */
+  @Get('/id_cli/:id_cli')
+  findByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {
+    return this.agendaNutricionistaService.findByIdCli(id_cli);
+  }
+
   @Get('/id/:id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.agendaNutricionistaService.findOne(id);

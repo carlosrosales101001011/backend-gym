@@ -75,6 +75,18 @@ export class AgendaNutricionistaService {
     return { lista, total };
   }
 
+  /** Citas activas de un cliente, la más reciente primero (fecha yyyy-mm-dd, hora HH:mm) */
+  async findByIdCli(id_cli: number) {
+    return this.agendaRepository.query(`
+      SELECT id, id_cli, id_empl, label_nombres_apellidos_empl, duracionxmin, id_estado, label_estado,
+        CONVERT(varchar(10), fecha, 23) AS fecha,
+        CONVERT(varchar(5), hora_inicio, 108) AS hora_inicio
+      FROM agenda_nutricionista
+      WHERE id_cli = @0 AND flag = 1
+      ORDER BY fecha DESC, hora_inicio DESC
+    `, [id_cli]);
+  }
+
   async findOne(id: number) {
     const cita = await this.agendaRepository.findOne({ where: { id, flag: true } });
     if (!cita) throw new NotFoundException(`Cita ${id} no encontrada`);

@@ -116,10 +116,15 @@ export class MembresiaExtensionService {
       })
       await this.membresiaExtensionRepository.save(membresiaExtension)
 
-      await this.membresiaSeguimientoService.update(seguimiento.id!, {
-        fecha_vencimiento: nuevaFechaVencimiento,
-        id_extension_actual: membresiaExtension.id
-      });
+      if (id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) {
+        // Congelamiento: se recalcula el seguimiento de SU venta (vencimiento y congelamiento disponible exactos)
+        await this.recalcularSeguimientoCongelamiento(membresiaExtension.id_venta);
+      } else {
+        await this.membresiaSeguimientoService.update(seguimiento.id!, {
+          fecha_vencimiento: nuevaFechaVencimiento,
+          id_extension_actual: membresiaExtension.id
+        });
+      }
 
       return {
         ok: true,
@@ -149,6 +154,18 @@ export class MembresiaExtensionService {
       }
   }
 
+  /** Extensiones activas de una venta, la más reciente primero; fechas como yyyy-mm-dd */
+  async findByIdVenta(id_venta: number) {
+    return this.membresiaExtensionRepository.query(`
+      SELECT id, id_tipo_extension, label_tipo_extension, id_venta, id_cli, dias_habiles, observacion,
+        CONVERT(varchar(10), fecha_inicio, 23) AS fecha_inicio,
+        CONVERT(varchar(10), fecha_fin, 23) AS fecha_fin
+      FROM membresia_extension
+      WHERE id_venta = @0 AND flag = 1
+      ORDER BY id DESC
+    `, [id_venta]);
+  }
+
   async findOne(id: number) {
     return await this.membresiaExtensionRepository.findOne({
       where: { id, flag: true },
@@ -168,6 +185,8 @@ export class MembresiaExtensionService {
   }
 
   async update(id: number, updateMembresiaExtensionDto: UpdateMembresiaExtensionDto) {
+    // Cómo estaba antes: si era congelamiento (o cambia de venta) también se recalcula la venta anterior
+    const anterior = await this.membresiaExtensionRepository.findOne({ select: { id: true, id_venta: true, id_tipo_extension: true }, where: { id } });
     const labels = await this.getLabels(updateMembresiaExtensionDto);
     const membresiaExtension = await this.membresiaExtensionRepository.preload({
       id,
@@ -177,6 +196,10 @@ export class MembresiaExtensionService {
     if (!membresiaExtension) throw new BadRequestException(`MembresiaExtension with id ${id} not found`);
     try {
       await this.membresiaExtensionRepository.save(membresiaExtension);
+      const ventas = new Set<number | undefined>();
+      if (anterior?.id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) ventas.add(anterior.id_venta);
+      if (membresiaExtension.id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) ventas.add(membresiaExtension.id_venta);
+      for (const id_venta of ventas) await this.recalcularSeguimientoCongelamiento(id_venta);
       return {
         ok: true,
         msg: 'actualizado con exito'
@@ -186,8 +209,18 @@ export class MembresiaExtensionService {
     }
   }
 
-  remove(id: number) {
-    return this.membresiaExtensionRepository.update(id, {flag: false});
+  async remove(id: number) {
+    const extension = await this.membresiaExtensionRepository.findOne({ select: { id: true, id_venta: true, id_tipo_extension: true }, where: { id } });
+    const resultado = await this.membresiaExtensionRepository.update(id, {flag: false});
+    // Congelamiento dado de baja: su venta recupera esos días (vencimiento y congelamiento disponible)
+    if (extension?.id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) await this.recalcularSeguimientoCongelamiento(extension.id_venta);
+    return resultado;
+  }
+
+  /** Recalcula el seguimiento de la venta de un congelamiento (6089); sin venta no hay nada que recalcular */
+  private async recalcularSeguimientoCongelamiento(id_venta?: number) {
+    if (id_venta == null) return;
+    await this.membresiaSeguimientoService.actualizarSeguimientoPorVenta(id_venta);
   }
 
   async findSearch (  q: string,

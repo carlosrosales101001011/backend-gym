@@ -52,6 +52,12 @@ export class MembresiaSeguimiento {
     // @Column({ type: 'int', nullable: true })
     // n_r?: number; // MEMBRESIA_EXTENSION.ENTITY=>[id]
 
+    @Column({ type: 'int', default: 0 })
+    dias_congelamiento_disponibles?: number; // vigente: DETALLEVENTA_MEMBRESIA.ENTITY=>[dias_congelamiento_regalo] - dias de extensiones "Congelamiento"; vencida o inactiva: 0
+
+    @Column({ type: 'int', default: 0 })
+    sesiones_nutricion_disponibles?: number; // vigente: DETALLEVENTA_MEMBRESIA.ENTITY=>[citas_nutricion_regalo] - citas "Atendido" en la membresia; vencida o inactiva: 0
+
     @Column('bit', {
         default: true,
         select: false
