@@ -54,6 +54,14 @@ export class ModuloXUserService implements OnModuleInit {
       return modulos;
   }
 
+  /** Guarda is_fijado de un módulo del usuario logueado; un módulo de otro usuario (o dado de baja) no se encuentra */
+  async cambiarFijado(id: number, idUser: number, is_fijado: boolean) {
+    const moduloUser = await this.ModuloXUserRepositorio.findOne({ select: { id: true }, where: { id, id_user: idUser, flag: true } });
+    if (!moduloUser) throw new NotFoundException('El módulo no es tuyo o no existe');
+    await this.ModuloXUserRepositorio.update(id, { is_fijado });
+    return { ok: true, id, is_fijado };
+  }
+
   async findBySeccionxModuloUser(iduser:number) {
     console.log({iduser}, 'modulo-x-user.service.ts');
     // const modulos =await this.SeccionXmoduloUserRepository.find({ where: {moduloUser: {id_user: iduser}}, relations: ['moduloUser', 'moduloUser.modulo']});

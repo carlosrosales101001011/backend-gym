@@ -5,6 +5,7 @@ import { CreatePersonaEventosAsistenciaDto } from './dto/create-persona_eventos_
 import { UpdatePersonaEventosAsistenciaDto } from './dto/update-persona_eventos_asistencia.dto';
 import { PersonaEventosAsistencia } from './entities/persona_eventos_asistencia.entity';
 import { Persona } from 'src/persona/entities/persona.entity';
+import { avataresPorPersona } from 'src/persona/avatar-persona';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { BuscarAsistenciasDto } from './dto/buscar-asistencias.dto';
@@ -234,7 +235,7 @@ export class PersonaEventosAsistenciaService {
       if (fecha_inicio) consulta.andWhere('CAST(a.fecha_registro AS date) >= :fecha_inicio', { fecha_inicio });
       if (fecha_fin) consulta.andWhere('CAST(a.fecha_registro AS date) <= :fecha_fin', { fecha_fin });
       const [items, total] = await consulta.getManyAndCount();
-      return { items, total }
+      return { items: await this.conAvatares(items), total }
     }
     const { items, total } = await this.fullTextSearchService.search(
       PersonaEventosAsistencia,
@@ -254,9 +255,34 @@ export class PersonaEventosAsistenciaService {
       }
     );
     return {
-      items,
+      items: await this.conAvatares(items),
       total
     }
+  }
+
+  /**
+   * Agrega la foto de la persona (avatar_persona) y la del colaborador del usuario que la registró
+   * (avatar_usercreated, por users.id_empl); null si no tiene
+   */
+  private async conAvatares<T extends { id_persona?: number | null, id_usercreated?: number | null }>(asistencias: T[]) {
+    const idsUsuarios = [...new Set(asistencias.map((a) => a.id_usercreated).filter((id): id is number => !!id))];
+    const usuarios: { id: number, id_empl: number | null }[] = idsUsuarios.length
+      ? await this.personaRepository.query(
+        `SELECT id, id_empl FROM users WHERE id IN (${idsUsuarios.map((_, i) => `@${i}`).join(', ')})`, idsUsuarios)
+      : [];
+    const emplPorUsuario = new Map(usuarios.map((u) => [u.id, u.id_empl]));
+    const avatares = await avataresPorPersona(this.personaRepository, [
+      ...asistencias.map((a) => a.id_persona),
+      ...usuarios.map((u) => u.id_empl),
+    ]);
+    return asistencias.map((a) => {
+      const idEmpl = a.id_usercreated ? emplPorUsuario.get(a.id_usercreated) : null;
+      return {
+        ...a,
+        avatar_persona: (a.id_persona && avatares.get(a.id_persona)) || null,
+        avatar_usercreated: (idEmpl && avatares.get(idEmpl)) || null,
+      };
+    });
   }
 
   private handleDBExceptions(error:any){

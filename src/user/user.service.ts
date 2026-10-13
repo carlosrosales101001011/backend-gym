@@ -255,6 +255,18 @@ export class UserService {
     return { ...datos, avatar: avatares.get(id_empl) ?? null };
   }
 
+  /** Colaborador (persona id_tipo 1, activa) vinculado al usuario por users.id_empl; null si no tiene */
+  async findMiEmpleado(id: number) {
+    const user = await this.userRepository.findOne({ where: { id }, select: { id: true, id_empl: true } });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+    if (!user.id_empl) return null;
+    const empleado = await this.personaRepository.findOne({
+      where: { id: user.id_empl, id_tipo: UserService.ID_TIPO_COLABORADOR, flag: true },
+      select: { id: true, nombres: true, apellido_paterno: true, apellido_materno: true, numero_documento: true, telefono: true, email_personal: true },
+    });
+    return empleado ?? null;
+  }
+
   findOne(id: number) {
     return `This action returns a #${id} user`;
   }

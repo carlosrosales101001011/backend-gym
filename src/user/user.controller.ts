@@ -47,6 +47,13 @@ export class UserController {
     return this.userService.findMe(idUser);
   }
 
+  /** Colaborador vinculado al usuario logueado (users.id_empl); null si no tiene uno activo */
+  @Get('/me/empleado')
+  @UseGuards(JwtAuthGuard)
+  findMiEmpleado(@GetUser('id') idUser: number) {
+    return this.userService.findMiEmpleado(idUser);
+  }
+
   /** El usuario logueado cambia su contraseña (con la actual); el usuario sale del token */
   @Patch('/me/password')
   @UseGuards(JwtAuthGuard)

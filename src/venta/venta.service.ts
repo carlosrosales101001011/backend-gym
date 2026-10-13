@@ -5,6 +5,7 @@ import { CreateVentaDto } from './dto/create-venta.dto';
 import { UpdateVentaDto } from './dto/update-venta.dto';
 import { Venta } from './entities/venta.entity';
 import { Persona } from 'src/persona/entities/persona.entity';
+import { avataresPorPersona } from 'src/persona/avatar-persona';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { EmpresaSucursal } from 'src/empresa-sucursal/entities/empresa-sucursal.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
@@ -352,7 +353,7 @@ export class VentaService {
     if (q.trim().length===0) {
       const { lista, total } = await this.findAll(paginationDto);
       return {
-        items: lista,
+        items: await this.conAvatares(lista),
         total
       }
     }
@@ -377,9 +378,19 @@ export class VentaService {
       }
     );
     return {
-      items,
+      items: await this.conAvatares(items),
       total
     }
+  }
+
+  /** Agrega la foto del asesor (avatar_empl) y del cliente (avatar_cli); null si no tiene */
+  private async conAvatares<T extends { id_empl?: number | null, id_cli?: number | null }>(ventas: T[]) {
+    const avatares = await avataresPorPersona(this.personaRepository, ventas.flatMap((v) => [v.id_empl, v.id_cli]));
+    return ventas.map((v) => ({
+      ...v,
+      avatar_empl: (v.id_empl && avatares.get(v.id_empl)) || null,
+      avatar_cli: (v.id_cli && avatares.get(v.id_cli)) || null,
+    }));
   }
 
   private handleDBExceptions(error:any){

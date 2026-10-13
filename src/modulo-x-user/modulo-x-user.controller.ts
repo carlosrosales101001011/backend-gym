@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Put, Body, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { ModuloXUserService } from './modulo-x-user.service';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
 import { GetUser } from 'src/user/decorator/get-user.decorator';
 import { CreateModuloXUserDto } from './dto/create-modulo-x-user.dto';
 import { AsignarModulosDto } from './dto/asignar-modulos.dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { CambiarFijadoDto } from './dto/cambiar-fijado.dto';
 
 @Controller('modulo-x-user')
 export class ModuloXUserController {
@@ -19,6 +20,13 @@ export class ModuloXUserController {
   findAll(@GetUser('id') iduser:number) {
     return this.moduloXUserService.findAll(iduser);
   }
+  /** El usuario logueado fija / desfija uno de SUS módulos (chincheta del Home) */
+  @Patch('/me/id/:id/fijado')
+  @UseGuards(JwtAuthGuard)
+  cambiarFijado(@Param('id', ParseIntPipe) id: number, @GetUser('id') idUser: number, @Body() { is_fijado }: CambiarFijadoDto) {
+    return this.moduloXUserService.cambiarFijado(id, idUser, is_fijado);
+  }
+
   @Get('/user/secciones')
   @UseGuards(JwtAuthGuard)
   findBySeccionxModuloUser(@GetUser('id') iduser:number) {
