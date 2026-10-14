@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { CreateMembresiaSeguimientoDto } from './dto/create-membresia-seguimiento.dto';
@@ -53,6 +54,39 @@ export class MembresiaSeguimientoService {
       `);
     } catch (error) {
       this.logger.error('No se pudo completar el asesor de membresia_seguimiento', error);
+    }
+    await this.recalcularExtensionActual();
+  }
+
+  /**
+   * Recalcula id_extension_actual / label_extension_actual de todos los seguimientos activos según HOY (Perú):
+   * la extensión activa de su venta cuyo rango [fecha_inicio, fecha_fin] contiene hoy; si hay varias, la más
+   * reciente (mayor fecha_inicio y, si empatan, mayor id). Sin ninguna en curso queda en NULL.
+   * Corre al iniciar y cada día a las 00:05 (Perú), porque la extensión en uso cambia con la fecha.
+   */
+  @Cron('5 0 * * *', { timeZone: 'America/Lima' })
+  async recalcularExtensionActual() {
+    try {
+      const hoy = diaLocal(new Date());
+      await this.membresiaSeguimientoRepository.query(`
+        UPDATE s SET
+          s.id_extension_actual = e.id,
+          s.label_extension_actual = e.label_tipo_extension
+        FROM membresia_seguimiento s
+        OUTER APPLY (
+          SELECT TOP 1 x.id, x.label_tipo_extension
+          FROM membresia_extension x
+          WHERE x.id_venta = s.id_venta AND x.flag = 1
+            AND x.fecha_inicio <= @0 AND x.fecha_fin >= @0
+          ORDER BY x.fecha_inicio DESC, x.id DESC
+        ) e
+        WHERE s.flag = 1
+          AND (ISNULL(s.id_extension_actual, 0) <> ISNULL(e.id, 0)
+            OR ISNULL(s.label_extension_actual, '') <> ISNULL(e.label_tipo_extension, ''))
+      `, [hoy]);
+      this.logger.log(`Extensión actual de membresia_seguimiento recalculada (${hoy})`);
+    } catch (error) {
+      this.logger.error('No se pudo recalcular la extensión actual de membresia_seguimiento', error);
     }
   }
 
@@ -168,7 +202,8 @@ export class MembresiaSeguimientoService {
    * Fila de membresia_seguimiento de una venta (sin guardar). Misma regla para el proceso masivo y el de una venta:
    * - Prioridad para id_* y label_*: 1) venta, 2) detalleventa_membresia, 3) persona (cliente / asesor).
    * - fecha_vencimiento = detalle.fecha_fin + SUM(dias_habiles) de sus extensiones activas (días corridos).
-   * - id_extension_actual = la última extensión (por id) cuyo rango [fecha_inicio, fecha_fin] contiene hoy.
+   * - id_extension_actual = la extensión cuyo rango [fecha_inicio, fecha_fin] contiene hoy; si hay varias, la más
+   *   reciente (mayor fecha_inicio y, si empatan, mayor id). Misma regla que recalcularExtensionActual.
    * - Disponibles (solo si está vigente: vence hoy o después; si no, 0. Nunca negativos):
    *   dias_congelamiento_disponibles = detalle.dias_congelamiento_regalo - SUM(dias_habiles) de sus extensiones "Congelamiento";
    *   sesiones_nutricion_disponibles = detalle.citas_nutricion_regalo - citas "Atendido" del cliente entre
@@ -198,11 +233,11 @@ export class MembresiaSeguimientoService {
     const inicioUTC = detalle.fecha_inicio ? this.aDiaUTC(detalle.fecha_inicio) : -Infinity;
     const citasUsadas = citasAtendidas.filter(dia => dia >= inicioUTC && dia <= vencimientoUTC).length;
 
-    // Ordenadas por id ASC: la última que cumpla es la extensión actual.
+    // En curso hoy; si hay varias, la que empezó más tarde (empate: mayor id)
     const extensionActual = extensionesVenta
       .filter(e => e.fecha_inicio && e.fecha_fin
         && this.aDiaUTC(e.fecha_inicio) <= hoyUTC && hoyUTC <= this.aDiaUTC(e.fecha_fin))
-      .pop();
+      .sort((a, b) => this.aDiaUTC(b.fecha_inicio!) - this.aDiaUTC(a.fecha_inicio!) || b.id! - a.id!)[0];
 
     return this.membresiaSeguimientoRepository.create({
       id: idExistente,
@@ -372,8 +407,29 @@ export class MembresiaSeguimientoService {
         id: 'ASC'
       }
     });
+    // Por seguimiento: uid del cliente (link a su perfil) y su extensión en curso hoy (id_extension_actual):
+    // es_congelado / es_regalo, inicio (yyyy-mm-dd) y días
+    const extras: { id: number, uid_cli: string | null, id_tipo_extension: number | null, fecha_inicio: string | null, dias_habiles: number | null }[] =
+      await this.membresiaSeguimientoRepository.query(`
+        SELECT s.id, p.uid AS uid_cli, e.id_tipo_extension, CONVERT(varchar(10), e.fecha_inicio, 23) AS fecha_inicio, e.dias_habiles
+        FROM membresia_seguimiento s
+        LEFT JOIN persona p ON p.id = s.id_cli
+        LEFT JOIN membresia_extension e ON e.id = s.id_extension_actual AND e.flag = 1
+        WHERE s.flag = 1
+      `);
+    const extrasPorSeguimiento = new Map(extras.map(c => [c.id, c]));
     return {
-      lista,
+      lista: lista.map(s => {
+        const extra = extrasPorSeguimiento.get(s.id!);
+        return {
+          ...s,
+          uid_cli: extra?.uid_cli ?? null,
+          es_congelado: extra?.id_tipo_extension === MembresiaSeguimientoService.ID_EXTENSION_CONGELAMIENTO,
+          es_regalo: extra?.id_tipo_extension === MembresiaSeguimientoService.ID_EXTENSION_REGALO,
+          fecha_inicio_extension_actual: extra?.fecha_inicio ?? null,
+          dias_extension_actual: extra?.dias_habiles ?? null,
+        };
+      }),
       total
     }
   }

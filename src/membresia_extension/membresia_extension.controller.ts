@@ -28,6 +28,12 @@ export class MembresiaExtensionController {
     };
   }
 
+  /** Solo congelamientos (6089), para el panel de extensiones de congelamiento; el más reciente primero */
+  @Get('/congelamientos/search')
+  searchCongelamientos(@Query() paginationDto: PaginationDto) {
+    return this.membresiaExtensionService.findSearchCongelamientos(paginationDto.q ?? '', paginationDto);
+  }
+
   /** Extensiones activas de una venta (congelamientos y regalos), la más reciente primero */
   @Get('/id_venta/:id_venta')
   findByIdVenta(@Param('id_venta', ParseIntPipe) id_venta: number) {

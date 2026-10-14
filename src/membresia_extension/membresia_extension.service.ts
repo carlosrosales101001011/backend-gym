@@ -169,16 +169,9 @@ export class MembresiaExtensionService {
       })
       await this.membresiaExtensionRepository.save(membresiaExtension)
 
-      if (id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) {
-        // Congelamiento: se recalcula el seguimiento de SU venta (vencimiento y congelamiento disponible exactos)
-        await this.recalcularSeguimientoCongelamiento(membresiaExtension.id_venta);
-      } else {
-        // Regalo: el nuevo vencimiento es el fin de la extensión (vencimiento actual + días)
-        await this.membresiaSeguimientoService.update(seguimiento.id!, {
-          fecha_vencimiento: fecha_fin,
-          id_extension_actual: membresiaExtension.id
-        });
-      }
+      // Se recalcula el seguimiento de SU venta: vencimiento, congelamiento disponible y extensión en curso hoy
+      // (un regalo empieza en el vencimiento, así que normalmente aún no es la extensión actual)
+      await this.recalcularSeguimiento(membresiaExtension.id_venta ?? seguimiento.id_venta);
 
       return {
         ok: true,
@@ -263,10 +256,9 @@ export class MembresiaExtensionService {
     if (!membresiaExtension) throw new BadRequestException(`MembresiaExtension with id ${id} not found`);
     try {
       await this.membresiaExtensionRepository.save(membresiaExtension);
-      const ventas = new Set<number | undefined>();
-      if (anterior?.id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) ventas.add(anterior.id_venta);
-      if (membresiaExtension.id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) ventas.add(membresiaExtension.id_venta);
-      for (const id_venta of ventas) await this.recalcularSeguimientoCongelamiento(id_venta);
+      // La venta anterior y la nueva (si cambió): vencimiento y extensión actual pueden cambiar con cualquier tipo
+      const ventas = new Set<number | undefined>([anterior?.id_venta, membresiaExtension.id_venta]);
+      for (const id_venta of ventas) await this.recalcularSeguimiento(id_venta);
       return {
         ok: true,
         msg: 'actualizado con exito'
@@ -277,15 +269,15 @@ export class MembresiaExtensionService {
   }
 
   async remove(id: number) {
-    const extension = await this.membresiaExtensionRepository.findOne({ select: { id: true, id_venta: true, id_tipo_extension: true }, where: { id } });
+    const extension = await this.membresiaExtensionRepository.findOne({ select: { id: true, id_venta: true }, where: { id } });
     const resultado = await this.membresiaExtensionRepository.update(id, {flag: false});
-    // Congelamiento dado de baja: su venta recupera esos días (vencimiento y congelamiento disponible)
-    if (extension?.id_tipo_extension === ID_TIPO_EXTENSION_POR_FECHAS) await this.recalcularSeguimientoCongelamiento(extension.id_venta);
+    // Extensión dada de baja: su venta recalcula vencimiento, congelamiento disponible y extensión actual
+    await this.recalcularSeguimiento(extension?.id_venta);
     return resultado;
   }
 
-  /** Recalcula el seguimiento de la venta de un congelamiento (6089); sin venta no hay nada que recalcular */
-  private async recalcularSeguimientoCongelamiento(id_venta?: number) {
+  /** Recalcula el seguimiento de la venta de una extensión; sin venta no hay nada que recalcular */
+  private async recalcularSeguimiento(id_venta?: number) {
     if (id_venta == null) return;
     await this.membresiaSeguimientoService.actualizarSeguimientoPorVenta(id_venta);
   }
@@ -321,6 +313,27 @@ export class MembresiaExtensionService {
       items,
       total
     }
+  }
+
+  /** Búsqueda paginada solo de congelamientos (6089) activos; sin texto, el más reciente primero */
+  async findSearchCongelamientos(q: string, paginationDto: PaginationDto) {
+    const { offset, show } = paginationDto;
+    if (q.trim().length === 0) {
+      const [items, total] = await this.membresiaExtensionRepository.findAndCount({
+        take: show,
+        skip: offset,
+        where: { flag: true, id_tipo_extension: ID_TIPO_EXTENSION_POR_FECHAS },
+        order: { id: 'DESC' }
+      });
+      return { items, total };
+    }
+    const { items, total } = await this.fullTextSearchService.search(
+      MembresiaExtension,
+      ['label_venta', 'label_nombres_apellidos_cli', 'label_nombre_programa', 'label_nmes_plan', 'observacion'],
+      q,
+      { take: show, skip: offset, where: { flag: true, id_tipo_extension: ID_TIPO_EXTENSION_POR_FECHAS } }
+    );
+    return { items, total };
   }
 
   private handleDBExceptions(error:any){
