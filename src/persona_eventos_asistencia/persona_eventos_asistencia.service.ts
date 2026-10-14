@@ -12,6 +12,7 @@ import { BuscarAsistenciasDto } from './dto/buscar-asistencias.dto';
 import { ReporteAsistenciaClientesDto } from './dto/reporte-asistencia-clientes.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import type { UsuarioCreador } from 'src/user/decorator/usuario-creador.decorator';
+import { finDiaLocal, inicioDiaLocal } from 'src/common/helpers/rango-dia-local';
 
 @Injectable()
 export class PersonaEventosAsistenciaService {
@@ -121,10 +122,10 @@ export class PersonaEventosAsistenciaService {
    * id_programa filtra por programa; horario busca ese texto dentro del horario (ej. "07:00").
    */
   async reporteClientes({ fecha_inicio, fecha_fin, id_programa, horario }: ReporteAsistenciaClientesDto) {
-    const params: (string | number)[] = [];
+    const params: (string | number | Date)[] = [];
     const condiciones = ['a.flag = 1'];
-    if (fecha_inicio) { params.push(fecha_inicio); condiciones.push(`CAST(a.fecha_registro AS date) >= @${params.length - 1}`); }
-    if (fecha_fin) { params.push(fecha_fin); condiciones.push(`CAST(a.fecha_registro AS date) <= @${params.length - 1}`); }
+    if (fecha_inicio) { params.push(inicioDiaLocal(fecha_inicio)); condiciones.push(`a.fecha_registro >= @${params.length - 1}`); }
+    if (fecha_fin) { params.push(finDiaLocal(fecha_fin)); condiciones.push(`a.fecha_registro < @${params.length - 1}`); }
     if (id_programa) { params.push(id_programa); condiciones.push(`d.id_programa = @${params.length - 1}`); }
     if (horario?.trim()) { params.push(`%${horario.trim()}%`); condiciones.push(`d.label_horario LIKE @${params.length - 1}`); }
 
@@ -160,10 +161,10 @@ export class PersonaEventosAsistenciaService {
    * membresía vigente en el rango que no asistieron (ver resumenReporteClientes).
    */
   async resumen({ fecha_inicio, fecha_fin }: ReporteAsistenciaClientesDto) {
-    const params: string[] = [];
+    const params: Date[] = [];
     const condiciones = ['a.flag = 1'];
-    if (fecha_inicio) { params.push(fecha_inicio); condiciones.push(`CAST(a.fecha_registro AS date) >= @${params.length - 1}`); }
-    if (fecha_fin) { params.push(fecha_fin); condiciones.push(`CAST(a.fecha_registro AS date) <= @${params.length - 1}`); }
+    if (fecha_inicio) { params.push(inicioDiaLocal(fecha_inicio)); condiciones.push(`a.fecha_registro >= @${params.length - 1}`); }
+    if (fecha_fin) { params.push(finDiaLocal(fecha_fin)); condiciones.push(`a.fecha_registro < @${params.length - 1}`); }
 
     const [[asistidos], { clientes_sin_asistir }] = await Promise.all([
       this.personaEventosAsistenciaRepository.query(`
@@ -188,18 +189,20 @@ export class PersonaEventosAsistenciaService {
    * de inicio y empezó hasta la fecha de fin), del programa elegido si hay, que no registraron asistencia en el rango.
    */
   async resumenReporteClientes({ fecha_inicio, fecha_fin, id_programa }: ReporteAsistenciaClientesDto) {
-    const params: (string | number)[] = [];
+    const params: (string | number | Date)[] = [];
     const condiciones = ['ms.flag = 1'];
     const enRango: string[] = ['a.id_persona = ms.id_cli', 'a.flag = 1'];
     if (fecha_inicio) {
       params.push(fecha_inicio);
       condiciones.push(`ms.fecha_vencimiento >= @${params.length - 1}`);
-      enRango.push(`CAST(a.fecha_registro AS date) >= @${params.length - 1}`);
+      params.push(inicioDiaLocal(fecha_inicio));
+      enRango.push(`a.fecha_registro >= @${params.length - 1}`);
     }
     if (fecha_fin) {
       params.push(fecha_fin);
       condiciones.push(`(d.fecha_inicio IS NULL OR CAST(d.fecha_inicio AS date) <= @${params.length - 1})`);
-      enRango.push(`CAST(a.fecha_registro AS date) <= @${params.length - 1}`);
+      params.push(finDiaLocal(fecha_fin));
+      enRango.push(`a.fecha_registro < @${params.length - 1}`);
     }
     if (id_programa) { params.push(id_programa); condiciones.push(`d.id_programa = @${params.length - 1}`); }
 
@@ -225,15 +228,15 @@ export class PersonaEventosAsistenciaService {
     const { offset, show, fecha_inicio, fecha_fin } = buscarDto;
 
     if (!q || q.trim().length===0) {
-      // Sin texto: solo el rango de fechas (comparando la fecha, sin la hora)
+      // Sin texto: solo el rango de fechas (días de Perú, ver rango-dia-local)
       const consulta = this.personaEventosAsistenciaRepository
         .createQueryBuilder('a')
         .where('a.flag = 1')
         .orderBy('a.fecha_registro', 'DESC')
         .skip(offset)
         .take(show);
-      if (fecha_inicio) consulta.andWhere('CAST(a.fecha_registro AS date) >= :fecha_inicio', { fecha_inicio });
-      if (fecha_fin) consulta.andWhere('CAST(a.fecha_registro AS date) <= :fecha_fin', { fecha_fin });
+      if (fecha_inicio) consulta.andWhere('a.fecha_registro >= :desde', { desde: inicioDiaLocal(fecha_inicio) });
+      if (fecha_fin) consulta.andWhere('a.fecha_registro < :hasta', { hasta: finDiaLocal(fecha_fin) });
       const [items, total] = await consulta.getManyAndCount();
       return { items: await this.conAvatares(items), total }
     }

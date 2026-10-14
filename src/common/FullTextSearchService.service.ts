@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, EntityMetadata, EntityTarget } from 'typeorm';
 import type { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
 import { columnasBusquedaPedidas } from './contexto-busqueda';
+import { finDiaLocal, inicioDiaLocal } from './helpers/rango-dia-local';
 
 export type FullTextSearchWhereValue =
   | string
@@ -24,7 +25,7 @@ export interface FullTextSearchOptions {
    */
   where?: Record<string, FullTextSearchWhereValue | undefined>;
   /**
-   * Rango de fechas por columna, comparando solo la fecha (yyyy-mm-dd, ambos inclusive; sin valor = sin límite).
+   * Rango de fechas por columna (yyyy-mm-dd, días de Perú, ambos inclusive; sin valor = sin límite).
    * Ej: { fecha_registro: { desde: '2026-10-01', hasta: '2026-10-08' } }
    */
   rangosFecha?: Record<string, { desde?: string; hasta?: string }>;
@@ -213,6 +214,19 @@ export class FullTextSearchService {
       const column = metadata.columns.find(col => col.propertyName === property);
       if (!column) {
         throw new Error(`Columna de rango inválida: ${property}`);
+      }
+      // Columna con hora: se compara entera contra el día de Perú (ver rango-dia-local); solo fecha: tal cual
+      if (column.type !== 'date') {
+        const columnSql = `a.[${column.databaseName}]`;
+        if (desde) {
+          params.push(inicioDiaLocal(desde));
+          conditions.push(`${columnSql} >= @${params.length - 1}`);
+        }
+        if (hasta) {
+          params.push(finDiaLocal(hasta));
+          conditions.push(`${columnSql} < @${params.length - 1}`);
+        }
+        continue;
       }
       const fechaSql = `CAST(a.[${column.databaseName}] AS date)`;
       if (desde) {
