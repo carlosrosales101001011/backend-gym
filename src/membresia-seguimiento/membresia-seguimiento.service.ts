@@ -475,6 +475,7 @@ export class MembresiaSeguimientoService {
         CONVERT(varchar(10), s.fecha_vencimiento, 23) AS fecha_vencimiento,
         d.label_programa, d.label_plan, d.label_horario,
         CONVERT(varchar(10), d.fecha_inicio, 23) AS fecha_inicio,
+        CONVERT(varchar(10), d.fecha_fin, 23) AS fecha_fin,
         ISNULL(d.dias_congelamiento_regalo, 0) AS congelamiento_regalados,
         s.dias_congelamiento_disponibles AS congelamiento_disponibles,
         ISNULL(cg.dias, 0) AS dias_congelados,
@@ -484,7 +485,7 @@ export class MembresiaSeguimientoService {
         ISNULL(rg.dias, 0) AS dias_regalo
       FROM membresia_seguimiento s
       OUTER APPLY (
-        SELECT TOP 1 dm.label_programa, dm.label_plan, dm.label_horario, dm.fecha_inicio,
+        SELECT TOP 1 dm.label_programa, dm.label_plan, dm.label_horario, dm.fecha_inicio, dm.fecha_fin,
           dm.dias_congelamiento_regalo, dm.citas_nutricion_regalo
         FROM detalleventa_membresia dm
         WHERE dm.id_venta = s.id_venta AND dm.flag = 1
