@@ -57,6 +57,11 @@ export class MembresiaSeguimientoService {
   }
 
   // Normaliza una fecha (Date o string) a su día en UTC (ms), sin horas.
+  /** Hoy en Perú (no en UTC: de 19:00 a 24:00 en UTC ya es mañana) como día UTC en ms, para comparar con aDiaUTC */
+  private hoyUTC(): number {
+    return this.aDiaUTC(diaLocal(new Date()));
+  }
+
   private aDiaUTC(fecha: Date | string): number {
     const f = typeof fecha === 'string' ? new Date(fecha) : fecha;
     return Date.UTC(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate());
@@ -132,7 +137,7 @@ export class MembresiaSeguimientoService {
     const citasPorCliente = await this.citasAtendidasPorCliente();
     console.log(`Carga finalizada correcta de citas de nutricion atendidas (${citasPorCliente.size} clientes)`);
 
-    const hoyUTC = this.aDiaUTC(new Date());
+    const hoyUTC = this.hoyUTC();
     const seguimientos: MembresiaSeguimiento[] = [];
 
     for (const [id_venta, detalle] of detallePorVenta) {
@@ -272,7 +277,7 @@ export class MembresiaSeguimientoService {
       asesor: asesor ?? undefined,
       idExistente: reutilizada?.id,
       citasAtendidas: id_cli != null ? citasPorCliente.get(id_cli) ?? [] : [],
-      hoyUTC: this.aDiaUTC(new Date()),
+      hoyUTC: this.hoyUTC(),
     }));
 
     const idsDesactivar = existentes.filter(e => e.flag && e.id !== seguimiento.id).map(e => e.id!);
@@ -330,8 +335,7 @@ export class MembresiaSeguimientoService {
 
   private calcularSesionesPendientes(fecha_vencimiento?: Date | string): number {
     if (!fecha_vencimiento) return 0;
-    const hoy = new Date();
-    const hoyUTC = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+    const hoyUTC = this.hoyUTC();
     const vencimiento = typeof fecha_vencimiento === 'string' ? new Date(fecha_vencimiento) : fecha_vencimiento;
     const vencimientoUTC = Date.UTC(vencimiento.getUTCFullYear(), vencimiento.getUTCMonth(), vencimiento.getUTCDate());
     return Math.max(0, Math.round((vencimientoUTC - hoyUTC) / MS_POR_DIA) + 1);
