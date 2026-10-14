@@ -88,6 +88,25 @@ export class PersonaEventosAsistenciaService {
     }
   }
 
+  /**
+   * Asistencias de una persona, la más reciente primero, con la foto de quien la registró.
+   * fecha_inicio / fecha_fin (yyyy-mm-dd, opcionales) acotan la fecha de registro a esos días de Perú, ambos inclusive.
+   */
+  async findByIdPersona(id_persona: number, { fecha_inicio, fecha_fin }: { fecha_inicio?: string, fecha_fin?: string } = {}) {
+    const consulta = this.personaEventosAsistenciaRepository
+      .createQueryBuilder('a')
+      .where('a.flag = 1')
+      .andWhere('a.id_persona = :id_persona', { id_persona })
+      .orderBy('a.fecha_registro', 'DESC');
+    if (fecha_inicio) consulta.andWhere('a.fecha_registro >= :desde', { desde: inicioDiaLocal(fecha_inicio) });
+    if (fecha_fin) consulta.andWhere('a.fecha_registro < :hasta', { hasta: finDiaLocal(fecha_fin) });
+    const [ lista, total ] = await consulta.getManyAndCount();
+    return {
+      lista: await this.conAvatares(lista),
+      total
+    }
+  }
+
   async findOne(id: number) {
     return await this.personaEventosAsistenciaRepository.findOne({where: {id, flag: true}, select: {id: true, id_persona: true, label_nombres_apellidos_persona: false, id_tipo_evento: true, label_tipo_evento: false, deviceSN: true, fecha_registro: true}});
   }

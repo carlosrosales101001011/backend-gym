@@ -10,6 +10,7 @@ import { MembresiaExtension } from 'src/membresia_extension/entities/membresia_e
 import { DetalleventaMembresia } from 'src/detalleventa_membresias/entities/detalleventa_membresia.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
+import { diaLocal } from 'src/common/helpers/rango-dia-local';
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -404,9 +405,11 @@ export class MembresiaSeguimientoService {
    * dias_regalo: días de las extensiones "Congelamiento" y "Regalo" de la venta. citas_atendidas: citas "Atendido"
    * del cliente entre el inicio y el vencimiento de la membresía.
    * dias_regalo: días de las extensiones "Regalo" de esa venta.
+   * dias_asistidos: días distintos (de Perú) con asistencia del cliente entre el inicio y el vencimiento.
    */
   async findDetalleByIdCli(id_cli: number) {
-    return this.membresiaSeguimientoRepository.query(`
+    const [membresias, asistencias]: [{ fecha_inicio: string | null, fecha_vencimiento: string }[], { fecha_registro: Date }[]] = await Promise.all([
+      this.membresiaSeguimientoRepository.query(`
       SELECT
         s.id, s.id_cli, s.id_venta, s.label_venta, s.label_extension_actual, s.sesiones_pendientes,
         CONVERT(varchar(10), s.fecha_vencimiento, 23) AS fecha_vencimiento,
@@ -445,7 +448,17 @@ export class MembresiaSeguimientoService {
       ) ct
       WHERE s.id_cli = @0 AND s.flag = 1
     `, [id_cli, MembresiaSeguimientoService.ID_EXTENSION_CONGELAMIENTO, MembresiaSeguimientoService.ID_EXTENSION_REGALO,
-      MembresiaSeguimientoService.ID_CITA_ATENDIDA]);
+      MembresiaSeguimientoService.ID_CITA_ATENDIDA]),
+      this.membresiaSeguimientoRepository.query(
+        `SELECT fecha_registro FROM persona_eventos_asistencia WHERE id_persona = @0 AND flag = 1`, [id_cli]),
+    ]);
+    // El día se saca en Node: la hora guardada es la del servidor (Perú en local, UTC en Azure), ver rango-dia-local
+    const diasConAsistencia = [...new Set(asistencias.map((a) => diaLocal(a.fecha_registro)))];
+    return membresias.map((m) => ({
+      ...m,
+      dias_asistidos: diasConAsistencia
+        .filter((dia) => (!m.fecha_inicio || dia >= m.fecha_inicio) && dia <= m.fecha_vencimiento).length,
+    }));
   }
 
 

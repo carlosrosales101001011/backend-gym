@@ -14,3 +14,6 @@ export const finDiaLocal = (fecha: string) => {
   fin.setUTCDate(fin.getUTCDate() + 1);
   return fin;
 };
+
+/** Día de Perú (yyyy-mm-dd) de un datetime leído de la base (el driver ya lo devuelve como instante correcto) */
+export const diaLocal = (fecha: Date) => new Date(fecha.getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);

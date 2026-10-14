@@ -53,6 +53,13 @@ export class PersonaEventosAsistenciaController {
     };
   }
 
+  // Asistencias de una persona (ej. pestaña Asistencias del perfil del cliente), la más reciente primero;
+  // ?fecha_inicio=&fecha_fin= (yyyy-mm-dd, días de Perú) acota la fecha de registro (ej. dentro de una membresía)
+  @Get('/id_persona/:id_persona')
+  findByIdPersona(@Param('id_persona') id_persona: string, @Query() filtros: BuscarAsistenciasDto) {
+    return this.personaEventosAsistenciaService.findByIdPersona(+id_persona, filtros);
+  }
+
   @Get('/id/:id')
   findOne(@Param('id') id: string) {
     return this.personaEventosAsistenciaService.findOne(+id);
