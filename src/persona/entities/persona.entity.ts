@@ -77,6 +77,13 @@ export class Persona {
     @Column('varchar', {length: 100, nullable: true})
     label_tipo?:string; // EMPLEADO: 1, CLIENTE: 2, PROVEEDOR: 3, PACIENTE: 4, USUARIO: 5, OTRO: 6
 
+    // Subtipo dentro de id_tipo; sin subtipo: 0 y '' (las ya registradas se completan en PersonaService.onModuleInit)
+    @Column('int', { nullable: true, default: 0 })
+    id_subtipo?:number;
+
+    @Column('varchar', {length: 100, nullable: true, default: ''})
+    label_subtipo?:string;
+
     @Column('int')
     id_estado?:number;
 

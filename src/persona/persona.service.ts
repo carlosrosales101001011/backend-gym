@@ -60,6 +60,12 @@ export class PersonaService {
     } catch (error) {
       this.logger.error('No se pudo completar uid_archivos de persona', error);
     }
+    // Las personas creadas antes de existir id_subtipo / label_subtipo quedan sin subtipo (0 y '')
+    try {
+      await this.personaRepository.query(`UPDATE persona SET id_subtipo = ISNULL(id_subtipo, 0), label_subtipo = ISNULL(label_subtipo, '') WHERE id_subtipo IS NULL OR label_subtipo IS NULL`);
+    } catch (error) {
+      this.logger.error('No se pudo completar id_subtipo / label_subtipo de persona', error);
+    }
   }
 
   // Recorre TODA la tabla Persona y actualiza sus label_* a partir de los id_*
@@ -98,8 +104,9 @@ export class PersonaService {
     id_tipo_documento?: number;
     id_genero?: number;
     id_estado_civil?: number;
+    id_subtipo?: number;
   }) {
-    const ids = [dto.id_tipo_documento, dto.id_genero, dto.id_estado_civil]
+    const ids = [dto.id_tipo_documento, dto.id_genero, dto.id_estado_civil, dto.id_subtipo]
       .filter((id): id is number => id !== undefined && id !== null);
 
     const labels: Partial<Persona> = {};
@@ -111,6 +118,8 @@ export class PersonaService {
     if (dto.id_tipo_documento !== undefined) labels.label_tipo_documento = valorPorId.get(dto.id_tipo_documento);
     if (dto.id_genero !== undefined) labels.label_genero = valorPorId.get(dto.id_genero);
     if (dto.id_estado_civil !== undefined) labels.label_estado_civil = valorPorId.get(dto.id_estado_civil);
+    // Sin subtipo (0): ''
+    if (dto.id_subtipo !== undefined) labels.label_subtipo = valorPorId.get(dto.id_subtipo) ?? '';
 
     return labels;
   }

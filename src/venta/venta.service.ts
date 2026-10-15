@@ -193,7 +193,8 @@ export class VentaService {
         ...personaLabels,
         ...terminologiaLabels,
         ...sucursalLabels,
-        fecha_venta: new Date()
+        // La elegida en el punto de venta; sin ella, ahora
+        fecha_venta: createVentaDto.fecha_venta ?? new Date()
       })
       await this.ventaRepository.save(venta)
       return {

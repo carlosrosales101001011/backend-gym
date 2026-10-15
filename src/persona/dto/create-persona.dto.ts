@@ -60,6 +60,10 @@ export class CreatePersonaDto {
         @IsInt()
         id_tipo?:number;
 
+        @IsInt()
+        @IsOptional()
+        id_subtipo?:number;
+
         @IsString()
         direccion?:string;
 
