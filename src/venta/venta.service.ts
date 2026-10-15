@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
 import { CreateVentaDto } from './dto/create-venta.dto';
@@ -14,7 +14,9 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 import { DetalleventaMembresia } from 'src/detalleventa_membresias/entities/detalleventa_membresia.entity';
 import { DetalleventaProducto } from 'src/detalleventa_productos/entities/detalleventa_producto.entity';
 import { DetalleventaPago } from 'src/detalleventa_pagos/entities/detalleventa_pago.entity';
+import { MembresiaExtension } from 'src/membresia_extension/entities/membresia_extension.entity';
 import { MembresiaSeguimientoService } from 'src/membresia-seguimiento/membresia-seguimiento.service';
+import { MembresiaExtensionService } from 'src/membresia_extension/membresia_extension.service';
 
 @Injectable()
 export class VentaService {
@@ -35,7 +37,8 @@ export class VentaService {
     @InjectRepository(DetalleventaPago)
     private readonly detalleventaPagoRepository: Repository<DetalleventaPago>,
     private readonly fullTextSearchService: FullTextSearchService,
-    private readonly membresiaSeguimientoService: MembresiaSeguimientoService
+    private readonly membresiaSeguimientoService: MembresiaSeguimientoService,
+    private readonly membresiaExtensionService: MembresiaExtensionService,
   ){
     // Backfill puntual: recalcula los label_* y montos de TODA la data de Venta (no solo
     // el registro creado/editado). Descomentar únicamente cuando se necesite ejecutar.
@@ -293,6 +296,16 @@ export class VentaService {
     return { venta, membresias, productos, pagos };
   }
 
+  /** El detalle de la venta más sus extensiones y seguimientos (activos): todo lo que desactiva remove */
+  async findRelacionados(id: number) {
+    const [detalle, extensiones, seguimientos] = await Promise.all([
+      this.findDetalle(id),
+      this.membresiaExtensionService.findByIdVenta(id),
+      this.membresiaSeguimientoService.findByIdVenta(id),
+    ]);
+    return { ...detalle, extensiones, seguimientos };
+  }
+
   // Copia los campos derivados de la venta (VENTA.ENTITY=>[...]) a sus detalleventa_* y seguimiento.
   private async propagarVentaADetalles(venta: Venta) {
     const derivados = {
@@ -341,8 +354,18 @@ export class VentaService {
     }
   }
 
-  remove(id: number) {
-    return this.ventaRepository.update(id, {flag: false});
+  /** Borrado lógico de la venta con todo lo suyo (membresías, productos, pagos, extensiones y seguimiento): si algo falla, no se elimina nada */
+  async remove(id: number) {
+    const venta = await this.findOne(id);
+    if (!venta) throw new NotFoundException(`Venta ${id} no encontrada`);
+    await this.ventaRepository.manager.transaction(async (manager) => {
+      for (const entidad of [DetalleventaMembresia, DetalleventaProducto, DetalleventaPago, MembresiaExtension]) {
+        await manager.update(entidad, { id_venta: id }, { flag: false });
+      }
+      await this.membresiaSeguimientoService.desactivarPorVenta(id, manager);
+      await manager.update(Venta, id, { flag: false });
+    });
+    return { ok: true, msg: 'eliminado con exito' };
   }
 
   async findSearch (  q: string,

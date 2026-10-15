@@ -50,6 +50,12 @@ export class VentaController {
     return this.ventaService.findDetalle(+id);
   }
 
+  /** Todo lo conectado a la venta: lo que se muestra antes de eliminarla */
+  @Get('/id/:id/relacionados')
+  findRelacionados(@Param('id') id: string) {
+    return this.ventaService.findRelacionados(+id);
+  }
+
   @Patch('/id/:id')
   update(@Param('id') id: string, @Body() updateVentaDto: UpdateVentaDto) {
     return this.ventaService.update(+id, updateVentaDto);

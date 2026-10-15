@@ -11,10 +11,11 @@ import { DetalleventaProducto } from 'src/detalleventa_productos/entities/detall
 import { DetalleventaPago } from 'src/detalleventa_pagos/entities/detalleventa_pago.entity';
 import { MembresiaSeguimientoModule } from 'src/membresia-seguimiento/membresia-seguimiento.module';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
+import { MembresiaExtensionModule } from 'src/membresia_extension/membresia_extension.module';
 
 @Module({
   controllers: [VentaController],
   providers: [VentaService, FullTextSearchService],
-  imports: [TypeOrmModule.forFeature([Venta, Persona, Terminologia, EmpresaSucursal, DetalleventaMembresia, DetalleventaProducto, DetalleventaPago]), MembresiaSeguimientoModule]
+  imports: [TypeOrmModule.forFeature([Venta, Persona, Terminologia, EmpresaSucursal, DetalleventaMembresia, DetalleventaProducto, DetalleventaPago]), MembresiaSeguimientoModule, MembresiaExtensionModule]
 })
 export class VentaModule {}

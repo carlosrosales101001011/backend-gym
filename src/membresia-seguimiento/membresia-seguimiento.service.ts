@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { CreateMembresiaSeguimientoDto } from './dto/create-membresia-seguimiento.dto';
 import { UpdateMembresiaSeguimientoDto } from './dto/update-membresia-seguimiento.dto';
 import { MembresiaSeguimiento } from './entities/membresia-seguimiento.entity';
@@ -609,8 +609,14 @@ export class MembresiaSeguimientoService {
     );
   }
 
-  desactivarPorVenta(id_venta: number) {
-    return this.membresiaSeguimientoRepository.update({ id_venta }, { flag: false });
+  /** Seguimientos activos de una venta */
+  findByIdVenta(id_venta: number) {
+    return this.membresiaSeguimientoRepository.find({ where: { id_venta, flag: true }, order: { id: 'ASC' } });
+  }
+
+  /** Con `manager`, corre dentro de la transacción de quien llama (ej. al eliminar la venta completa) */
+  desactivarPorVenta(id_venta: number, manager: EntityManager = this.membresiaSeguimientoRepository.manager) {
+    return manager.update(MembresiaSeguimiento, { id_venta }, { flag: false });
   }
 
   async findSearch(q: string, paginationDto: PaginationDto) {

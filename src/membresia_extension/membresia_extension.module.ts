@@ -16,6 +16,7 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
   imports: [
     TypeOrmModule.forFeature([MembresiaExtension, Venta, Terminologia, ProgramaEntrenamiento, EntrenamientoPlan]),
     MembresiaSeguimientoModule
-  ]
+  ],
+  exports: [MembresiaExtensionService]
 })
 export class MembresiaExtensionModule {}
