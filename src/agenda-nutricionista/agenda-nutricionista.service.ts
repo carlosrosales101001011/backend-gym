@@ -8,6 +8,7 @@ import { Persona } from 'src/persona/entities/persona.entity';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
+import { AgendaNutricionistaGateway } from './agenda-nutricionista.gateway';
 
 const ID_TIPO_COLABORADOR = 1;
 const ID_TIPO_CLIENTE = 2;
@@ -25,7 +26,8 @@ export class AgendaNutricionistaService {
     private readonly personaRepository: Repository<Persona>,
     @InjectRepository(Terminologia)
     private readonly terminologiaRepository: Repository<Terminologia>,
-    private readonly fullTextSearchService: FullTextSearchService
+    private readonly fullTextSearchService: FullTextSearchService,
+    private readonly agendaGateway: AgendaNutricionistaGateway,
   ){}
 
   /**
@@ -58,6 +60,8 @@ export class AgendaNutricionistaService {
     try {
       const cita = this.agendaRepository.create({ ...createAgendaNutricionistaDto, ...labels });
       const { id } = await this.agendaRepository.save(cita);
+      // Tras el save el id siempre viene (en la entidad es opcional solo para el create)
+      this.agendaGateway.notificarCambio({ accion: 'crear', id: id! });
       return { ok: true, msg: 'creado con exito', id };
     } catch (error) {
       this.handleDBExceptions(error);
@@ -98,6 +102,7 @@ export class AgendaNutricionistaService {
     const labels = await this.getLabels(updateAgendaNutricionistaDto);
     try {
       await this.agendaRepository.update(id, { ...updateAgendaNutricionistaDto, ...labels });
+      this.agendaGateway.notificarCambio({ accion: 'editar', id });
       return { ok: true, msg: 'actualizado con exito' };
     } catch (error) {
       this.handleDBExceptions(error);
@@ -108,6 +113,7 @@ export class AgendaNutricionistaService {
   async remove(id: number) {
     await this.findOne(id);
     await this.agendaRepository.update(id, { flag: false });
+    this.agendaGateway.notificarCambio({ accion: 'eliminar', id });
     return { ok: true, msg: 'eliminado con exito' };
   }
 

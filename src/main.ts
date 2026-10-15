@@ -2,11 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { middlewareContextoBusqueda } from './common/contexto-busqueda';
+import { ORIGENES_PERMITIDOS } from './common/origenes-permitidos';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: ['http://localhost:5174', 'http://localhost:5173', 'https://frontend-gym-mu.vercel.app/'],
+    origin: ORIGENES_PERMITIDOS,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true, // si usas cookies o auth
   })
