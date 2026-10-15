@@ -196,7 +196,8 @@ export class DetalleventaProductosService {
       q,
       {
         take: show,
-        skip: offset
+        skip: offset,
+        where: { flag: true }
       }
     );
     return {

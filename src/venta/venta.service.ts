@@ -398,6 +398,7 @@ export class VentaService {
       {
         take: show,
         skip: offset,
+        where: { flag: true },
       }
     );
     return {

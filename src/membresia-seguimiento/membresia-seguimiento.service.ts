@@ -532,7 +532,7 @@ export class MembresiaSeguimientoService {
 
     const [venta, detalle] = await Promise.all([
       this.ventaRepository.findOne({
-        where: { id: seguimiento.id_venta },
+        where: { id: seguimiento.id_venta, flag: true },
         select: { id: true, montoTotal_membresia: true, montoTotal_productos: true, montoPagos: true },
       }),
       this.detalleventaMembresiaRepository.findOne({
@@ -643,7 +643,8 @@ export class MembresiaSeguimientoService {
       q,
       {
         take: show,
-        skip: offset
+        skip: offset,
+        where: { flag: true }
       }
     );
     return {
