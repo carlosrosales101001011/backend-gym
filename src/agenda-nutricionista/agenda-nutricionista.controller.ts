@@ -3,6 +3,7 @@ import { AgendaNutricionistaService } from './agenda-nutricionista.service';
 import { CreateAgendaNutricionistaDto } from './dto/create-agenda-nutricionista.dto';
 import { UpdateAgendaNutricionistaDto } from './dto/update-agenda-nutricionista.dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { BuscarAgendaRangoDto } from './dto/buscar-agenda-rango.dto';
 
 @Controller('agenda-nutricionista')
 export class AgendaNutricionistaController {
@@ -16,6 +17,12 @@ export class AgendaNutricionistaController {
   @Get()
   findAll(@Query() paginationDto: PaginationDto) {
     return this.agendaNutricionistaService.findAll(paginationDto);
+  }
+
+  /** Citas activas entre fecha_inicio y fecha_fin; con q, todas las citas de los clientes que coinciden */
+  @Get('/rango')
+  findRango(@Query() buscarAgendaRangoDto: BuscarAgendaRangoDto) {
+    return this.agendaNutricionistaService.findRango(buscarAgendaRangoDto);
   }
 
   @Get('/search')

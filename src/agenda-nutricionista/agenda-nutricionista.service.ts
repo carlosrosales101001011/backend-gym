@@ -9,6 +9,7 @@ import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { AgendaNutricionistaGateway } from './agenda-nutricionista.gateway';
+import { BuscarAgendaRangoDto } from './dto/buscar-agenda-rango.dto';
 
 const ID_TIPO_COLABORADOR = 1;
 const ID_TIPO_CLIENTE = 2;
@@ -55,8 +56,38 @@ export class AgendaNutricionistaService {
     return labels;
   }
 
+  /** "HH:mm" a minutos desde las 00:00 */
+  private aMinutos(hora: string): number {
+    const [h, m] = hora.slice(0, 5).split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  /**
+   * Misma regla que el calendario: una cita no se puede cruzar con otra cita activa del mismo día
+   * (terminar a la hora en que empieza la otra sí se permite). excluirId: la cita que se edita.
+   */
+  private async validarCruce(fecha: string, hora_inicio: string, duracionxmin: number, excluirId = 0) {
+    const inicio = this.aMinutos(hora_inicio);
+    const fin = inicio + duracionxmin;
+    const [cruce]: { label_nombres_apellidos_cli: string | null, inicio: number, duracionxmin: number }[] = await this.agendaRepository.query(`
+      SELECT TOP 1 label_nombres_apellidos_cli, DATEDIFF(minute, '00:00', hora_inicio) AS inicio, duracionxmin
+      FROM agenda_nutricionista
+      WHERE flag = 1 AND fecha = @0 AND id <> @1
+        AND DATEDIFF(minute, '00:00', hora_inicio) < @2
+        AND DATEDIFF(minute, '00:00', hora_inicio) + duracionxmin > @3
+    `, [fecha.slice(0, 10), excluirId, fin, inicio]);
+    if (cruce) {
+      const hhmm = (minutos: number) => `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+      throw new BadRequestException(
+        `Se cruza con el evento de ${cruce.label_nombres_apellidos_cli ?? ''} (${hhmm(cruce.inicio)} - ${hhmm(cruce.inicio + cruce.duracionxmin)})`,
+      );
+    }
+  }
+
   async create(createAgendaNutricionistaDto: CreateAgendaNutricionistaDto) {
     const labels = await this.getLabels(createAgendaNutricionistaDto);
+    const { fecha, hora_inicio, duracionxmin } = createAgendaNutricionistaDto;
+    await this.validarCruce(fecha, hora_inicio, duracionxmin);
     try {
       const cita = this.agendaRepository.create({ ...createAgendaNutricionistaDto, ...labels });
       const { id } = await this.agendaRepository.save(cita);
@@ -79,6 +110,29 @@ export class AgendaNutricionistaService {
     return { lista, total };
   }
 
+  /**
+   * Citas activas entre fecha_inicio y fecha_fin (ambas inclusive), en orden de fecha y hora.
+   * Con q se ignora el rango: todas las citas de los clientes cuyo nombre contiene q (sin distinguir tildes ni mayúsculas).
+   */
+  async findRango({ fecha_inicio, fecha_fin, q }: BuscarAgendaRangoDto) {
+    const texto = q?.trim();
+    if (!texto && (!fecha_inicio || !fecha_fin)) {
+      throw new BadRequestException('fecha_inicio y fecha_fin son obligatorios (o q para buscar un cliente)');
+    }
+    const consulta = this.agendaRepository
+      .createQueryBuilder('c')
+      .where('c.flag = 1')
+      .orderBy('c.fecha', 'ASC')
+      .addOrderBy('c.hora_inicio', 'ASC');
+    if (texto) {
+      consulta.andWhere('c.label_nombres_apellidos_cli COLLATE Latin1_General_CI_AI LIKE :q', { q: `%${texto}%` });
+    } else {
+      consulta.andWhere('c.fecha >= :fecha_inicio AND c.fecha <= :fecha_fin', { fecha_inicio, fecha_fin });
+    }
+    const [lista, total] = await consulta.getManyAndCount();
+    return { lista, total };
+  }
+
   /** Citas activas de un cliente, la más reciente primero (fecha yyyy-mm-dd, hora HH:mm) */
   async findByIdCli(id_cli: number) {
     return this.agendaRepository.query(`
@@ -98,8 +152,15 @@ export class AgendaNutricionistaService {
   }
 
   async update(id: number, updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto) {
-    await this.findOne(id);
+    const actual = await this.findOne(id);
     const labels = await this.getLabels(updateAgendaNutricionistaDto);
+    // Con los valores que quedarán (los que no vienen se mantienen)
+    await this.validarCruce(
+      String(updateAgendaNutricionistaDto.fecha ?? actual.fecha),
+      String(updateAgendaNutricionistaDto.hora_inicio ?? actual.hora_inicio),
+      updateAgendaNutricionistaDto.duracionxmin ?? actual.duracionxmin!,
+      id,
+    );
     try {
       await this.agendaRepository.update(id, { ...updateAgendaNutricionistaDto, ...labels });
       this.agendaGateway.notificarCambio({ accion: 'editar', id });
