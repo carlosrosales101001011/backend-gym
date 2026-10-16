@@ -11,6 +11,14 @@ export class PersonaEventosAsistencia {
     @Column({ type: 'varchar', length: 180, nullable: true })
     label_nombres_apellidos_persona?: string; // PERSONA.ENTITY=>[nombres, apellido_paterno, apellido_materno]
 
+    // Tipo de asistencia: Entrada, Salida, Refrigerio... (asistencia/tipo/persona); por defecto Entrada: 6141
+    // (ver ID_SUBTIPO_ASISTENCIA_POR_DEFECTO; las ya registradas se completan en onModuleInit)
+    @Column({ type: 'int', nullable: true, default: 6141 })
+    id_subtipo?: number; // TERMINOLOGIA.ENTITY=>[id]
+
+    @Column({ type: 'varchar', length: 100, nullable: true, default: '' })
+    label_subtipo?: string; // TERMINOLOGIA.ENTITY=>[valor]
+
     @Column({ type: 'int' })
     id_tipo_evento?: number; // TERMINOLOGIA.ENTITY=>[id]
 

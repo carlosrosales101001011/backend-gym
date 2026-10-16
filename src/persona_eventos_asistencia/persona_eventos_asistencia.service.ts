@@ -14,6 +14,9 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 import type { UsuarioCreador } from 'src/user/decorator/usuario-creador.decorator';
 import { finDiaLocal, inicioDiaLocal } from 'src/common/helpers/rango-dia-local';
 
+/** Tipo de asistencia cuando no se envía: "Entrada" (terminología asistencia/tipo/persona) */
+export const ID_SUBTIPO_ASISTENCIA_POR_DEFECTO = 6141
+
 @Injectable()
 export class PersonaEventosAsistenciaService {
   private readonly logger = new Logger('PersonaEventosAsistenciaService')
@@ -27,9 +30,24 @@ export class PersonaEventosAsistenciaService {
     private readonly fullTextSearchService: FullTextSearchService
   ){}
 
+  async onModuleInit() {
+    // Las asistencias sin un tipo de asistencia/tipo/persona (anteriores a id_subtipo, o con 0) quedan como Entrada
+    try {
+      await this.personaEventosAsistenciaRepository.query(`
+        UPDATE persona_eventos_asistencia
+        SET id_subtipo = @0, label_subtipo = ISNULL((SELECT valor FROM terminologia WHERE id = @0), '')
+        WHERE id_subtipo IS NULL
+          OR id_subtipo NOT IN (SELECT id FROM terminologia WHERE entidad = 'asistencia' AND grupo = 'tipo' AND subgrupo = 'persona')
+      `, [ID_SUBTIPO_ASISTENCIA_POR_DEFECTO]);
+    } catch (error) {
+      this.logger.error('No se pudo completar id_subtipo / label_subtipo de persona_eventos_asistencia', error);
+    }
+  }
+
   private async getLabels(dto: {
     id_persona?: number;
     id_tipo_evento?: number;
+    id_subtipo?: number;
   }) {
     const labels: Partial<PersonaEventosAsistencia> = {};
 
@@ -38,6 +56,11 @@ export class PersonaEventosAsistenciaService {
       if (persona) {
         labels.label_nombres_apellidos_persona = `${persona.nombres ?? ''} ${persona.apellido_paterno ?? ''} ${persona.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim();
       }
+    }
+
+    if (dto.id_subtipo !== undefined && dto.id_subtipo !== null) {
+      const terminologia = await this.terminologiaRepository.findOneBy({ id: dto.id_subtipo });
+      labels.label_subtipo = terminologia?.valor ?? '';
     }
 
     if (dto.id_tipo_evento !== undefined && dto.id_tipo_evento !== null) {
@@ -51,9 +74,11 @@ export class PersonaEventosAsistenciaService {
   /** creador: usuario logueado que registra la asistencia (lo entrega el guard con @UsuarioCreador) */
   async create(createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, creador: UsuarioCreador) {
     try {
-      const labels = await this.getLabels(createPersonaEventosAsistenciaDto);
+      // Sin tipo de asistencia (ej. las que llegan del dispositivo): Entrada
+      const dto = { ...createPersonaEventosAsistenciaDto, id_subtipo: createPersonaEventosAsistenciaDto.id_subtipo || ID_SUBTIPO_ASISTENCIA_POR_DEFECTO };
+      const labels = await this.getLabels(dto);
       const evento = this.personaEventosAsistenciaRepository.create({
-        ...createPersonaEventosAsistenciaDto,
+        ...dto,
         ...labels,
         ...creador,
         // Momento del registro: fecha y hora actuales del servidor
@@ -263,6 +288,7 @@ export class PersonaEventosAsistenciaService {
       PersonaEventosAsistencia,
       [
         'label_nombres_apellidos_persona',
+        'label_subtipo',
         'label_tipo_evento',
         'deviceSN',
         'label_nombres_apellidos_usercreated'

@@ -7,6 +7,11 @@ export class CreatePersonaEventosAsistenciaDto {
     @IsNumber()
     id_tipo_evento?: number; // TERMINOLOGIA.ENTITY=>[id]
 
+    // Entrada, Salida, Refrigerio... (asistencia/tipo/persona); si no se envía al crear: Entrada
+    @IsNumber()
+    @IsOptional()
+    id_subtipo?: number; // TERMINOLOGIA.ENTITY=>[id]
+
     @IsString()
     @MaxLength(100)
     @IsOptional()
