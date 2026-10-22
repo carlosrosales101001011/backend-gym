@@ -278,6 +278,9 @@ export class PersonaEventosAsistenciaService {
     const pHace13 = `@${params.length - 1}`;
     params.push(haceDias(6));
     const pHace6 = `@${params.length - 1}`;
+    // Día de Perú de cada asistencia = horas desde una medianoche de Perú / 24 (1 asistencia por cliente por día)
+    params.push(inicioDiaLocal('2000-01-01'));
+    const pBaseDias = `@${params.length - 1}`;
 
     const filas: {
       id_persona: number, nombres: string | null, apellido_paterno: string | null, apellido_materno: string | null,
@@ -306,7 +309,7 @@ export class PersonaEventosAsistenciaService {
       INNER JOIN persona p ON p.id = c.id_cli
       OUTER APPLY (
         SELECT
-          COUNT(CASE WHEN ${enRango.join(' AND ')} THEN 1 END) AS en_rango,
+          COUNT(DISTINCT CASE WHEN ${enRango.join(' AND ')} THEN DATEDIFF(hour, ${pBaseDias}, a.fecha_registro) / 24 END) AS en_rango,
           MAX(CASE WHEN a.fecha_registro < ${pFinReferencia} THEN a.fecha_registro END) AS ultima,
           COUNT(*) AS total
         FROM persona_eventos_asistencia a
