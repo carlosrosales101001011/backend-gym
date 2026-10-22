@@ -14,6 +14,9 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 import { BlobStorageService } from 'src/blob-storage/blob-storage.service';
 
 const AVATAR_CONTAINER = 'avatarpersona';
+/** Colaboradores (id_tipo 1): en los buscadores solo salen los activos (id_estado 1) */
+const ID_TIPO_COLABORADOR = 1;
+const ID_ESTADO_ACTIVO = 1;
 
 @Injectable()
 export class PersonaService {
@@ -302,11 +305,21 @@ export class PersonaService {
       id_tipo: number
     ){
       const SEARCH_BOX_LIMIT = 20;
+      // Colaboradores: solo los activos
+      const filtro = {
+        flag: true,
+        id_tipo,
+        ...(Number(id_tipo) === ID_TIPO_COLABORADOR ? { id_estado: ID_ESTADO_ACTIVO } : {}),
+      };
 
       if (!q || q.trim().length === 0) {
-        const { lista, total } = await this.findAll(id_tipo, { show: SEARCH_BOX_LIMIT, offset: 0 });
+        const [items, total] = await this.personaRepository.findAndCount({
+          where: filtro,
+          take: SEARCH_BOX_LIMIT,
+          order: { id: 'DESC' },
+        });
         return {
-          items: lista,
+          items,
           total
         }
       }
@@ -325,10 +338,7 @@ export class PersonaService {
         {
           take: SEARCH_BOX_LIMIT,
           skip: 0,
-          where: {
-            flag: true,
-            id_tipo
-          }
+          where: filtro
         }
       );
       return {
@@ -337,13 +347,18 @@ export class PersonaService {
       }
     }
 
-    // Buscador de clientes y colaboradores juntos (id_tipo 2 y 1): mismos campos que findSearchBox
+    // Buscador de clientes y colaboradores juntos (id_tipo 2 y 1): mismos campos que findSearchBox.
+    // Los colaboradores solo si están activos.
     async findSearchBoxTodos(q: string) {
       const SEARCH_BOX_LIMIT = 20;
-      const TIPOS = [1, 2];
+      const ID_TIPO_CLIENTE = 2;
+      const TIPOS = [ID_TIPO_COLABORADOR, ID_TIPO_CLIENTE];
       if (!q || q.trim().length === 0) {
         const [items, total] = await this.personaRepository.findAndCount({
-          where: { flag: true, id_tipo: In(TIPOS) },
+          where: [
+            { flag: true, id_tipo: ID_TIPO_CLIENTE },
+            { flag: true, id_tipo: ID_TIPO_COLABORADOR, id_estado: ID_ESTADO_ACTIVO },
+          ],
           take: SEARCH_BOX_LIMIT,
           order: { id: 'DESC' },
         });
@@ -353,7 +368,12 @@ export class PersonaService {
         Persona,
         ['nombres', 'apellido_paterno', 'apellido_materno', 'telefono', 'email_personal', 'numero_documento'],
         q,
-        { take: SEARCH_BOX_LIMIT, skip: 0, where: { flag: true, id_tipo: TIPOS } }
+        {
+          take: SEARCH_BOX_LIMIT,
+          skip: 0,
+          where: { flag: true, id_tipo: TIPOS },
+          condicionSql: `a.[id_tipo] <> ${ID_TIPO_COLABORADOR} OR a.[id_estado] = ${ID_ESTADO_ACTIVO}`,
+        }
       );
     }
 

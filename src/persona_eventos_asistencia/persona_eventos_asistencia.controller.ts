@@ -30,7 +30,13 @@ export class PersonaEventosAsistenciaController {
     return this.personaEventosAsistenciaService.resumen(filtros);
   }
 
-  // Resumen del reporte: clientes con membresía vigente en el rango (del programa) que no asistieron
+  // Resumen del reporte (clientes con membresía vigente en el rango, del programa): sin asistir, en riesgo, críticos y nunca asistieron
+  // Los clientes de ese resumen, cada uno con su última asistencia y en qué grupos entra (para listarlos)
+  @Get('/reporte-clientes/resumen/clientes')
+  clientesReporteClientes(@Query() filtros: ReporteAsistenciaClientesDto) {
+    return this.personaEventosAsistenciaService.clientesReporteClientes(filtros);
+  }
+
   @Get('/reporte-clientes/resumen')
   resumenReporteClientes(@Query() filtros: ReporteAsistenciaClientesDto) {
     return this.personaEventosAsistenciaService.resumenReporteClientes(filtros);

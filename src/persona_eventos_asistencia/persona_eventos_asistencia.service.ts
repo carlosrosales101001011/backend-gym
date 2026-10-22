@@ -12,7 +12,7 @@ import { BuscarAsistenciasDto } from './dto/buscar-asistencias.dto';
 import { ReporteAsistenciaClientesDto } from './dto/reporte-asistencia-clientes.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import type { UsuarioCreador } from 'src/user/decorator/usuario-creador.decorator';
-import { finDiaLocal, inicioDiaLocal } from 'src/common/helpers/rango-dia-local';
+import { diaLocal, finDiaLocal, inicioDiaLocal } from 'src/common/helpers/rango-dia-local';
 
 /** Tipo de asistencia cuando no se envía: "Entrada" (terminología asistencia/tipo/persona) */
 export const ID_SUBTIPO_ASISTENCIA_POR_DEFECTO = 6141
@@ -229,13 +229,31 @@ export class PersonaEventosAsistenciaService {
   }
 
   /**
-   * Clientes sin asistir: clientes (persona id_tipo 2) con una membresía vigente en el rango (vence desde la fecha
-   * de inicio y empezó hasta la fecha de fin), del programa elegido si hay, que no registraron asistencia en el rango.
+   * Resumen de clientes (persona id_tipo 2) con una membresía vigente en el rango (vence desde la fecha de inicio y
+   * empezó hasta la fecha de fin), del programa elegido si hay:
+   * - clientes_sin_asistir: no registraron asistencia en el rango.
+   * - clientes_en_riesgo / clientes_criticos: su última asistencia (hasta la fecha de fin, o hoy) fue hace 7–13 / ≥14 días.
+   * - clientes_nunca_asistieron: no tienen ninguna asistencia.
    */
-  async resumenReporteClientes({ fecha_inicio, fecha_fin, id_programa }: ReporteAsistenciaClientesDto) {
+  async resumenReporteClientes(filtros: ReporteAsistenciaClientesDto) {
+    const clientes = await this.clientesReporteClientes(filtros);
+    return {
+      clientes_sin_asistir: clientes.filter(c => c.sin_asistir).length,
+      clientes_en_riesgo: clientes.filter(c => c.en_riesgo).length,
+      clientes_criticos: clientes.filter(c => c.critico).length,
+      clientes_nunca_asistieron: clientes.filter(c => c.nunca_asistio).length,
+    };
+  }
+
+  /**
+   * Clientes del resumen (ver resumenReporteClientes), cada uno con su última asistencia (hasta el día de referencia),
+   * cuántas tuvo en el rango y en qué grupos del resumen entra. Ordenados por nombre.
+   */
+  async clientesReporteClientes({ fecha_inicio, fecha_fin, id_programa }: ReporteAsistenciaClientesDto) {
     const params: (string | number | Date)[] = [];
     const condiciones = ['ms.flag = 1'];
-    const enRango: string[] = ['a.id_persona = ms.id_cli', 'a.flag = 1'];
+    // Asistencia (alias a) dentro del rango; sin fechas, cualquiera
+    const enRango: string[] = ['1 = 1'];
     if (fecha_inicio) {
       params.push(fecha_inicio);
       condiciones.push(`ms.fecha_vencimiento >= @${params.length - 1}`);
@@ -250,19 +268,63 @@ export class PersonaEventosAsistenciaService {
     }
     if (id_programa) { params.push(id_programa); condiciones.push(`d.id_programa = @${params.length - 1}`); }
 
-    const [fila] = await this.personaEventosAsistenciaRepository.query(`
-      SELECT COUNT(DISTINCT ms.id_cli) AS clientes_sin_asistir
-      FROM membresia_seguimiento ms
-      INNER JOIN persona p ON p.id = ms.id_cli AND p.id_tipo = 2 AND p.flag = 1
+    // Días sin asistir contados hasta el día de referencia (fecha de fin, o hoy), con límites en hora de Perú
+    const DIA_MS = 24 * 60 * 60 * 1000;
+    const referencia = inicioDiaLocal(fecha_fin || diaLocal(new Date()));
+    const haceDias = (dias: number) => new Date(referencia.getTime() - dias * DIA_MS);
+    params.push(new Date(referencia.getTime() + DIA_MS));
+    const pFinReferencia = `@${params.length - 1}`;
+    params.push(haceDias(13));
+    const pHace13 = `@${params.length - 1}`;
+    params.push(haceDias(6));
+    const pHace6 = `@${params.length - 1}`;
+
+    const filas: {
+      id_persona: number, nombres: string | null, apellido_paterno: string | null, apellido_materno: string | null,
+      ultima_asistencia: Date | null, asistencias_en_rango: number,
+      sin_asistir: number, en_riesgo: number, critico: number, nunca_asistio: number,
+    }[] = await this.personaEventosAsistenciaRepository.query(`
+      WITH clientes AS (
+        SELECT DISTINCT ms.id_cli
+        FROM membresia_seguimiento ms
+        INNER JOIN persona p ON p.id = ms.id_cli AND p.id_tipo = 2 AND p.flag = 1
+        OUTER APPLY (
+          SELECT TOP 1 dm.id_programa, dm.fecha_inicio
+          FROM detalleventa_membresia dm
+          WHERE dm.id_venta = ms.id_venta AND dm.flag = 1
+        ) d
+        WHERE ${condiciones.join(' AND ')}
+      )
+      SELECT
+        c.id_cli AS id_persona, p.nombres, p.apellido_paterno, p.apellido_materno,
+        u.ultima AS ultima_asistencia, u.en_rango AS asistencias_en_rango,
+        CASE WHEN u.en_rango = 0 THEN 1 ELSE 0 END AS sin_asistir,
+        CASE WHEN u.ultima >= ${pHace13} AND u.ultima < ${pHace6} THEN 1 ELSE 0 END AS en_riesgo,
+        CASE WHEN u.ultima < ${pHace13} THEN 1 ELSE 0 END AS critico,
+        CASE WHEN u.total = 0 THEN 1 ELSE 0 END AS nunca_asistio
+      FROM clientes c
+      INNER JOIN persona p ON p.id = c.id_cli
       OUTER APPLY (
-        SELECT TOP 1 dm.id_programa, dm.fecha_inicio
-        FROM detalleventa_membresia dm
-        WHERE dm.id_venta = ms.id_venta AND dm.flag = 1
-      ) d
-      WHERE ${condiciones.join(' AND ')}
-        AND NOT EXISTS (SELECT 1 FROM persona_eventos_asistencia a WHERE ${enRango.join(' AND ')})
+        SELECT
+          COUNT(CASE WHEN ${enRango.join(' AND ')} THEN 1 END) AS en_rango,
+          MAX(CASE WHEN a.fecha_registro < ${pFinReferencia} THEN a.fecha_registro END) AS ultima,
+          COUNT(*) AS total
+        FROM persona_eventos_asistencia a
+        WHERE a.id_persona = c.id_cli AND a.flag = 1
+      ) u
     `, params);
-    return { clientes_sin_asistir: Number(fila?.clientes_sin_asistir ?? 0) };
+    return filas
+      .map(f => ({
+        id_persona: f.id_persona,
+        label_nombres_apellidos_persona: `${f.nombres ?? ''} ${f.apellido_paterno ?? ''} ${f.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim(),
+        ultima_asistencia: f.ultima_asistencia,
+        asistencias_en_rango: Number(f.asistencias_en_rango ?? 0),
+        sin_asistir: !!f.sin_asistir,
+        en_riesgo: !!f.en_riesgo,
+        critico: !!f.critico,
+        nunca_asistio: !!f.nunca_asistio,
+      }))
+      .sort((x, y) => x.label_nombres_apellidos_persona.localeCompare(y.label_nombres_apellidos_persona));
   }
 
   /** Búsqueda paginada, la más reciente primero; fecha_inicio / fecha_fin (yyyy-mm-dd) acotan la fecha de registro */

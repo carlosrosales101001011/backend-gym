@@ -35,6 +35,18 @@ export class MembresiaSeguimiento {
     @Column({ type: 'varchar', length: 180, nullable: true })
     label_nombres_apellidos_empl?: string; // VENTA.ENTITY=>[label_nombres_apellidos_empl]
 
+    @Column({ type: 'int', default: 0 })
+    id_programa?: number; // DETALLEVENTA_MEMBRESIA.ENTITY=>[id_programa]
+
+    @Column({ type: 'varchar', length: 180, default: '' })
+    label_programa?: string; // DETALLEVENTA_MEMBRESIA.ENTITY=>[label_programa]
+
+    @Column({ type: 'int', default: 0 })
+    id_plan?: number; // DETALLEVENTA_MEMBRESIA.ENTITY=>[id_plan]
+
+    @Column({ type: 'varchar', length: 30, default: '' })
+    n_plan?: string; // DETALLEVENTA_MEMBRESIA.ENTITY=>[label_plan]
+
     @Column({ type: 'int', nullable: true })
     id_extension_actual?: number; // MEMBRESIA_EXTENSION.ENTITY=>[id]
 

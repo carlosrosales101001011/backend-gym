@@ -97,14 +97,14 @@ export class ModuloXUserService implements OnModuleInit {
   // Gestión de módulos por usuario
 
   /**
-   * Ids de los usuarios que puede administrar: el super usuario a todos, los demás a los que registraron.
-   * Nunca a sí mismo.
+   * Ids de los usuarios que puede administrar: el super usuario a todos (también a sí mismo, para
+   * asignarse módulos), los demás a los que registraron (nunca a sí mismos).
    */
   private async idsAdministrables(idAdmin: number) {
     const admin = await this.userRepository.findOne({ where: { id: idAdmin }, select: { id: true, is_super_user: true } });
     if (!admin) throw new ForbiddenException('Usuario no encontrado');
     const usuarios = await this.userRepository.find({
-      where: { id: Not(idAdmin), flag: true, ...(admin.is_super_user ? {} : { id_userParent: idAdmin }) },
+      where: { flag: true, ...(admin.is_super_user ? {} : { id: Not(idAdmin), id_userParent: idAdmin }) },
       select: { id: true },
     });
     return usuarios.map((usuario) => usuario.id);
@@ -112,10 +112,10 @@ export class ModuloXUserService implements OnModuleInit {
 
   /** Falla si quien administra no puede tocar los módulos de este usuario */
   private async validarAdministrable(idUsuario: number, idAdmin: number) {
-    if (idUsuario === idAdmin) throw new ForbiddenException('No puedes cambiar tus propios módulos');
     const usuario = await this.userRepository.findOne({ where: { id: idUsuario, flag: true }, select: { id: true } });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
     if (!(await this.idsAdministrables(idAdmin)).includes(idUsuario)) {
+      if (idUsuario === idAdmin) throw new ForbiddenException('Solo un super usuario puede cambiar sus propios módulos');
       throw new ForbiddenException('Solo quien registró a este usuario o un super usuario puede cambiar sus módulos');
     }
   }

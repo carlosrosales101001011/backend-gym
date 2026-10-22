@@ -34,6 +34,11 @@ export interface FullTextSearchOptions {
    * Solo se usan las que también están en `columns` (la lista permitida del servicio).
    */
   columnasPedidas?: string[];
+  /**
+   * Condición SQL fija que se agrega con AND (alias de la tabla: `a`), para lo que `where` no cubre (ej. un OR).
+   * Solo texto escrito en el código: nunca valores que vengan del usuario.
+   */
+  condicionSql?: string;
 }
 
 export interface PaginatedResult<T> {
@@ -109,7 +114,7 @@ export class FullTextSearchService {
       params.push(`%${token}%`);
       return `h.txt LIKE @${params.length - 1}`;
     });
-    const filtros = this.buildWhere(metadata, options.where, params, options.rangosFecha);
+    const filtros = this.buildWhere(metadata, options.where, params, options.rangosFecha, options.condicionSql);
     const whereClause = filtros
       ? `${filtros} AND ${todasLasPalabras.join(' AND ')}`
       : `WHERE ${todasLasPalabras.join(' AND ')}`;
@@ -207,8 +212,9 @@ export class FullTextSearchService {
     where: FullTextSearchOptions['where'],
     params: any[],
     rangosFecha?: FullTextSearchOptions['rangosFecha'],
+    condicionSql?: string,
   ): string {
-    const conditions: string[] = [];
+    const conditions: string[] = condicionSql ? [`(${condicionSql})`] : [];
 
     for (const [property, { desde, hasta }] of Object.entries(rangosFecha ?? {})) {
       const column = metadata.columns.find(col => col.propertyName === property);
