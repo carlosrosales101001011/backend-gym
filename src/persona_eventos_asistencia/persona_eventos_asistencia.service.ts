@@ -330,6 +330,48 @@ export class PersonaEventosAsistenciaService {
       .sort((x, y) => x.label_nombres_apellidos_persona.localeCompare(y.label_nombres_apellidos_persona));
   }
 
+  /**
+   * Días distintos (de Perú) con asistencia de cada persona en los últimos `dias` días, hoy incluido, y días
+   * desde su última asistencia (recencia: 0 = hoy; null = nunca asistió). tendencia: días asistidos en el periodo
+   * actual menos el promedio de los 2 periodos anteriores del mismo largo (ej. días 31–60 y 61–90 hacia atrás).
+   * Devuelve una fila por id pedido.
+   */
+  async diasAsistidos(ids: number[], dias: number) {
+    if (!ids.length) return [];
+    const DIA_MS = 24 * 60 * 60 * 1000;
+    const manana = new Date(inicioDiaLocal(diaLocal(new Date())).getTime() + DIA_MS);
+    const desde = new Date(manana.getTime() - dias * DIA_MS);
+    const desdeAnterior1 = new Date(desde.getTime() - dias * DIA_MS);
+    const desdeAnterior2 = new Date(desdeAnterior1.getTime() - dias * DIA_MS);
+    // Día de Perú = horas desde una medianoche de Perú / 24
+    const base = inicioDiaLocal('2000-01-01');
+    const hoy = Math.floor((manana.getTime() - DIA_MS - base.getTime()) / DIA_MS);
+    const filas: { id_persona: number, dias_asistidos: number, dias_anterior1: number, dias_anterior2: number, ultimo_dia: number | null }[] =
+      await this.personaEventosAsistenciaRepository.query(`
+      SELECT a.id_persona,
+        COUNT(DISTINCT CASE WHEN a.fecha_registro >= @1 THEN DATEDIFF(hour, @0, a.fecha_registro) / 24 END) AS dias_asistidos,
+        COUNT(DISTINCT CASE WHEN a.fecha_registro >= @3 AND a.fecha_registro < @1 THEN DATEDIFF(hour, @0, a.fecha_registro) / 24 END) AS dias_anterior1,
+        COUNT(DISTINCT CASE WHEN a.fecha_registro >= @4 AND a.fecha_registro < @3 THEN DATEDIFF(hour, @0, a.fecha_registro) / 24 END) AS dias_anterior2,
+        MAX(DATEDIFF(hour, @0, a.fecha_registro) / 24) AS ultimo_dia
+      FROM persona_eventos_asistencia a
+      WHERE a.flag = 1 AND a.fecha_registro < @2
+        AND a.id_persona IN (${ids.map((_, i) => `@${i + 5}`).join(',')})
+      GROUP BY a.id_persona
+    `, [base, desde, manana, desdeAnterior1, desdeAnterior2, ...ids]);
+    const porPersona = new Map(filas.map((f) => [f.id_persona, f]));
+    return ids.map((id_persona) => {
+      const fila = porPersona.get(id_persona);
+      const dias_asistidos = Number(fila?.dias_asistidos ?? 0);
+      const promedioAnterior = (Number(fila?.dias_anterior1 ?? 0) + Number(fila?.dias_anterior2 ?? 0)) / 2;
+      return {
+        id_persona,
+        dias_asistidos,
+        tendencia: dias_asistidos - promedioAnterior,
+        dias_desde_ultima: fila?.ultimo_dia == null ? null : hoy - Number(fila.ultimo_dia),
+      };
+    });
+  }
+
   /** Búsqueda paginada, la más reciente primero; fecha_inicio / fecha_fin (yyyy-mm-dd) acotan la fecha de registro */
   async findSearch(q: string,
     buscarDto: BuscarAsistenciasDto

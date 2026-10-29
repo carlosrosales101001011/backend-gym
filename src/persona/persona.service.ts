@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { extname } from 'path';
 import { v4 as uidv4 } from 'uuid';
 import { CreatePersonaDto } from './dto/create-persona.dto';
@@ -12,6 +12,7 @@ import { Ubigeo } from 'src/ubigeo/entities/ubigeo.entity';
 import { In, Not, Repository } from 'typeorm';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { BlobStorageService } from 'src/blob-storage/blob-storage.service';
+import { User } from 'src/user/entities/user.entity';
 
 const AVATAR_CONTAINER = 'avatarpersona';
 /** Colaboradores (id_tipo 1): en los buscadores solo salen los activos (id_estado 1) */
@@ -28,6 +29,8 @@ export class PersonaService {
     private readonly terminologiaRepository:Repository<Terminologia>,
     @InjectRepository(Ubigeo)
     private readonly ubigeoRepository:Repository<Ubigeo>,
+    @InjectRepository(User)
+    private readonly userRepository:Repository<User>,
     private readonly fullTextSearchService: FullTextSearchService,
     private readonly blobStorageService: BlobStorageService
   ){
@@ -465,9 +468,13 @@ export class PersonaService {
         ...ubigeoLabels
       })
       if(!persona) throw new NotFoundException(`Persona with id: ${id} and id_tipo ${id_tipo} not found`)
+      const datosUsuario = persona.id_tipo === ID_TIPO_COLABORADOR ? await this.datosParaUsuarios(persona) : null
       await this.personaRepository.save(persona)
+      // Los usuarios vinculados a este colaborador llevan sus nombres, apellidos y correos
+      if (datosUsuario) await this.userRepository.update({ id_empl: persona.id, flag: true }, datosUsuario)
       return persona;
     } catch (error) {
+      if (error instanceof HttpException) throw error
       console.log({error});
       
       this.handleDBExceptions(error)
@@ -482,6 +489,25 @@ export class PersonaService {
       msg: `La persona con id ${id} y id_tipo ${id_tipo}, se eliminó`
     };
   }
+  /**
+   * Nombres, apellidos y correos del colaborador para sus usuarios vinculados (users.id_empl).
+   * Su correo personal es el email de esos usuarios (con el que inician sesión): no puede ser el de otro usuario.
+   */
+  private async datosParaUsuarios(colaborador: Persona): Promise<Pick<User, 'nombres' | 'apellidos' | 'email' | 'email_corporativo'>> {
+    const email = colaborador.email_personal?.trim() || null
+    if (email) {
+      const tomado = await this.userRepository.exists({ where: { email, flag: true, id_empl: Not(colaborador.id!) } })
+      if (tomado) throw new BadRequestException(`El correo ${email} ya lo usa otro usuario del sistema`)
+    }
+    return {
+      nombres: colaborador.nombres?.trim() ?? '',
+      apellidos: [colaborador.apellido_paterno, colaborador.apellido_materno].map((a) => a?.trim()).filter(Boolean).join(' '),
+      // null: el usuario se queda sin correo si el colaborador no tiene
+      email: email as string,
+      email_corporativo: (colaborador.email_corporativo?.trim() || null) as string,
+    }
+  }
+
   private handleDBExceptions(error:any){
     if(error.code === '23505')
       throw new BadRequestException(error.detail);

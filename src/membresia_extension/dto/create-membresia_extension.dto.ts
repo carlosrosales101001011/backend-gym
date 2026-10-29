@@ -21,7 +21,8 @@ export class CreateMembresiaExtensionDto {
     @IsOptional()
     id_plan?: number;
 
-    // Requerido solo cuando id_tipo_extension=6089.
+    // Requerido cuando id_tipo_extension=6089; opcional en 6090 (sin ella el regalo empieza en el vencimiento).
+    // Debe estar entre el inicio y el vencimiento de la membresía.
     @IsDateString()
     @IsOptional()
     fecha_inicio?: Date;

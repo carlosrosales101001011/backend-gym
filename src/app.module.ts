@@ -57,6 +57,8 @@ import { VentasMetaModule } from './ventas-meta/ventas-meta.module';
 import { DetallemetaAsesorModule } from './detallemeta_asesor/detallemeta_asesor.module';
 import { PersonaEventosAsistenciaModule } from './persona_eventos_asistencia/persona_eventos_asistencia.module';
 import { AgendaNutricionistaModule } from './agenda-nutricionista/agenda-nutricionista.module';
+import { CompromisosPagoClienteModule } from './compromisos-pago-cliente/compromisos-pago-cliente.module';
+import { NotificationPermisosModule } from './notification-permisos/notification-permisos.module';
 @Module({
   providers: [TasksService],
   imports: [
@@ -134,6 +136,8 @@ import { AgendaNutricionistaModule } from './agenda-nutricionista/agenda-nutrici
     DetallemetaAsesorModule,
     PersonaEventosAsistenciaModule,
     AgendaNutricionistaModule,
+    CompromisosPagoClienteModule,
+    NotificationPermisosModule,
   ],
 })
 export class AppModule {}

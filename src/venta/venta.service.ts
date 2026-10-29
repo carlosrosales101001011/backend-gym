@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CreateVentaDto } from './dto/create-venta.dto';
 import { UpdateVentaDto } from './dto/update-venta.dto';
 import { Venta } from './entities/venta.entity';
@@ -224,21 +224,25 @@ export class VentaService {
   }
   // Ventas activas entre fecha_inicio (desde las 00:00) y fecha_fin (hasta las 23:59:59.999), sin paginar,
   // cada una con sus membresías activas (id_programa, id_plan, montoTotal).
-  async findByRangoFechas({ fecha_inicio, fecha_fin }: RangoFechasDto) {
+  // Con por_fecha_pago: las ventas que tienen algún pago activo con fecha_pago en el rango.
+  async findByRangoFechas({ fecha_inicio, fecha_fin, por_fecha_pago = false }: RangoFechasDto) {
     const desde = new Date(`${fecha_inicio.slice(0, 10)}T00:00:00`);
     const hasta = new Date(`${fecha_fin.slice(0, 10)}T23:59:59.999`);
     if (hasta.getTime() < desde.getTime()) {
       throw new BadRequestException('fecha_fin no puede ser anterior a fecha_inicio');
     }
-    const [ ventas, total ] = await this.ventaRepository.findAndCount({
-      where: {
-        flag: true,
-        fecha_venta: Between(desde, hasta)
-      },
-      order: {
-        fecha_venta: 'ASC'
-      }
-    });
+    // Condición sobre la venta (alias v): por fecha_venta o por la fecha_pago (date) de sus pagos
+    const filtroRango = por_fecha_pago
+      ? `EXISTS (SELECT 1 FROM detalleventa_pago p WHERE p.id_venta = v.id AND p.flag = 1 AND p.fecha_pago BETWEEN :fechaDesde AND :fechaHasta)`
+      : 'v.fecha_venta BETWEEN :desde AND :hasta';
+    const parametros = { desde, hasta, fechaDesde: fecha_inicio.slice(0, 10), fechaHasta: fecha_fin.slice(0, 10) };
+
+    const [ ventas, total ] = await this.ventaRepository
+      .createQueryBuilder('v')
+      .where('v.flag = 1')
+      .andWhere(filtroRango, parametros)
+      .orderBy('v.fecha_venta', 'ASC')
+      .getManyAndCount();
 
     // Membresías activas de esas ventas (programa + monto), para filtrar/sumar por programa en los reportes.
     // Se filtran por el mismo rango con un JOIN (no con IN(ids): SQL Server limita a 2100 parámetros).
@@ -247,7 +251,7 @@ export class VentaService {
       .innerJoin(Venta, 'v', 'v.id = m.id_venta')
       .select(['m.id_venta AS id_venta', 'm.id_programa AS id_programa', 'm.id_plan AS id_plan', 'm.montoTotal AS montoTotal'])
       .where('m.flag = 1 AND v.flag = 1')
-      .andWhere('v.fecha_venta BETWEEN :desde AND :hasta', { desde, hasta })
+      .andWhere(filtroRango, parametros)
       .getRawMany<{ id_venta: number, id_programa: number, id_plan: number, montoTotal: number }>();
     const membresiasPorVenta = new Map<number, { id_programa: number, id_plan: number, montoTotal: number }[]>();
     for (const { id_venta, id_programa, id_plan, montoTotal } of membresias) {
@@ -256,8 +260,25 @@ export class VentaService {
       membresiasPorVenta.set(id_venta, listaVenta);
     }
 
+    // Con por_fecha_pago: primer pago de cada venta dentro del rango (yyyy-MM-dd), para ubicarla en los reportes por día
+    const fechaPagoPorVenta = new Map<number, string>();
+    if (por_fecha_pago) {
+      const pagos = await this.detalleventaPagoRepository
+        .createQueryBuilder('p')
+        .select(['p.id_venta AS id_venta', `CONVERT(varchar(10), MIN(p.fecha_pago), 23) AS fecha_pago`])
+        .where('p.flag = 1')
+        .andWhere('p.fecha_pago BETWEEN :fechaDesde AND :fechaHasta', parametros)
+        .groupBy('p.id_venta')
+        .getRawMany<{ id_venta: number, fecha_pago: string }>();
+      for (const { id_venta, fecha_pago } of pagos) fechaPagoPorVenta.set(id_venta, fecha_pago);
+    }
+
     return {
-      lista: ventas.map((venta) => ({ ...venta, membresias: membresiasPorVenta.get(venta.id!) ?? [] })),
+      lista: ventas.map((venta) => ({
+        ...venta,
+        membresias: membresiasPorVenta.get(venta.id!) ?? [],
+        fecha_pago: fechaPagoPorVenta.get(venta.id!) ?? null,
+      })),
       total
     }
   }

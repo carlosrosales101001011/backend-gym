@@ -3,7 +3,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { ModuloXUser } from 'src/modulo-x-user/entities/modulo-x-user.entity';
 import { SeccionXModulouser } from 'src/seccion-x-modulouser/entities/seccion-x-modulouser.entity';
 import { EntidadXUser } from 'src/entidad-x-user/entities/entidad-x-user.entity';
@@ -76,7 +76,9 @@ export class UserService {
 
   async create(createUserDto: CreateUserDto, idUserParent: number) {
     try {
-      const { password, uuid, id, id_userParent, ...userData } = createUserDto;
+      const { password, uuid, id, id_userParent, ...datos } = createUserDto;
+      // Con colaborador vinculado, sus nombres, apellidos y correos reemplazan a los escritos
+      const userData = { ...datos, ...(datos.id_empl ? await this.datosDelColaborador(datos.id_empl) : {}) };
 
       // El login es por email o usuario: ninguno de los dos puede repetirse (el email es opcional)
       if (userData.email) {
@@ -321,15 +323,39 @@ export class UserService {
     if (dto.is_super_user !== undefined && !puedeMarcarSuper) {
       throw new ForbiddenException('Solo un super usuario puede cambiar si otro usuario es super usuario');
     }
-    if (dto.id_empl) {
-      const colaborador = await this.personaRepository.findOne({ where: { id: dto.id_empl, id_tipo: UserService.ID_TIPO_COLABORADOR, flag: true }, select: { id: true } });
-      if (!colaborador) throw new BadRequestException('El colaborador elegido no existe');
+    // Con colaborador vinculado, sus nombres, apellidos y correos reemplazan a los del usuario
+    const datosColaborador = dto.id_empl ? await this.datosDelColaborador(dto.id_empl, idUsuario) : {};
+    if (dto.usuario !== undefined) {
+      const usuarioTomado = await this.userRepository.exists({ where: { usuario: dto.usuario, flag: true, id: Not(idUsuario) } });
+      if (usuarioTomado) throw new BadRequestException('Ese nombre de usuario ya está en uso');
     }
 
     const labels = dto.id_rol !== undefined ? await this.getTerminologiaLabels({ id_rol: dto.id_rol }) : {};
     if (dto.id_rol !== undefined && !labels.label_rol) throw new BadRequestException('El rol elegido no existe');
-    await this.userRepository.update(idUsuario, { ...dto, ...labels });
+    await this.userRepository.update(idUsuario, { ...dto, ...labels, ...datosColaborador });
     return { ok: true, msg: 'Datos de sistema actualizados' };
+  }
+
+  /**
+   * Nombres, apellidos y correos del colaborador (persona id_tipo 1) para copiarlos al usuario que lo tiene vinculado.
+   * El correo personal pasa a ser el email del usuario (con el que también inicia sesión): no puede ser el de otro usuario.
+   * idUsuario: el usuario que se edita (no choca consigo mismo).
+   */
+  private async datosDelColaborador(id_empl: number, idUsuario?: number): Promise<Pick<User, 'nombres' | 'apellidos' | 'email' | 'email_corporativo'>> {
+    const colaborador = await this.personaRepository.findOne({ where: { id: id_empl, id_tipo: UserService.ID_TIPO_COLABORADOR, flag: true } });
+    if (!colaborador) throw new BadRequestException('El colaborador elegido no existe');
+    const email = colaborador.email_personal?.trim() || null;
+    if (email) {
+      const tomado = await this.userRepository.exists({ where: { email, flag: true, ...(idUsuario ? { id: Not(idUsuario) } : {}) } });
+      if (tomado) throw new BadRequestException(`El correo del colaborador (${email}) ya lo usa otro usuario`);
+    }
+    return {
+      nombres: colaborador.nombres?.trim() ?? '',
+      apellidos: [colaborador.apellido_paterno, colaborador.apellido_materno].map((a) => a?.trim()).filter(Boolean).join(' '),
+      // null: el usuario se queda sin correo si el colaborador no tiene
+      email: email as string,
+      email_corporativo: (colaborador.email_corporativo?.trim() || null) as string,
+    };
   }
 
   /**

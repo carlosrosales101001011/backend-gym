@@ -442,7 +442,101 @@ export class MembresiaSeguimientoService {
     return await this.membresiaSeguimientoRepository.findOne({ where: { id, flag: true } });
   }
 
+  /**
+   * Clientes activos (reporte de clientes activos): por cliente, su seguimiento que vence más tarde, solo si
+   * fecha_vencimiento > hoy (día de Perú). Con el tipo de cliente de su venta (Nuevo, Renovación, Reinscripción),
+   * el uid del cliente (link a su perfil), sus datos personales (género, estado civil, distrito y fecha de nacimiento,
+   * para los gráficos), lo vendido en membresías en esa venta y si hoy está en congelamiento o regalo (extensión en curso).
+   */
+  async activos() {
+    const filas: {
+      id: number, id_cli: number, uid_cli: string | null, label_nombres_apellidos_cli: string | null, telefono_cli: string | null,
+      id_programa: number, label_programa: string, n_plan: string, id_empl: number | null, label_nombres_apellidos_empl: string | null,
+      fecha_vencimiento: string, id_tipo_cli: number | null, label_tipo_cli: string | null, id_tipo_extension: number | null,
+      label_genero: string | null, label_estado_civil: string | null, label_distrito: string | null, fecha_nacimiento: string | null,
+      monto_membresia: number | null,
+    }[] = await this.membresiaSeguimientoRepository.query(`
+      SELECT s.id, s.id_cli, p.uid AS uid_cli, s.label_nombres_apellidos_cli, s.telefono_cli,
+        s.id_programa, s.label_programa, s.n_plan, s.id_empl, s.label_nombres_apellidos_empl,
+        CONVERT(varchar(10), s.fecha_vencimiento, 23) AS fecha_vencimiento,
+        v.id_tipo_cli, v.label_tipo_cli, e.id_tipo_extension, v.montoTotal_membresia AS monto_membresia,
+        p.label_genero, p.label_estado_civil, p.label_distrito, CONVERT(varchar(10), p.fecha_nacimiento, 23) AS fecha_nacimiento
+      FROM (
+        SELECT ms.*, ROW_NUMBER() OVER (PARTITION BY ms.id_cli ORDER BY ms.fecha_vencimiento DESC, ms.id DESC) AS n
+        FROM membresia_seguimiento ms
+        WHERE ms.flag = 1
+      ) s
+      LEFT JOIN persona p ON p.id = s.id_cli
+      LEFT JOIN venta v ON v.id = s.id_venta
+      LEFT JOIN membresia_extension e ON e.id = s.id_extension_actual AND e.flag = 1
+      WHERE s.n = 1 AND s.fecha_vencimiento > @0
+      ORDER BY s.fecha_vencimiento ASC
+    `, [diaLocal(new Date())]);
+    return filas.map(({ id_tipo_extension, monto_membresia, ...fila }) => ({
+      ...fila,
+      // Lo vendido en membresías en su venta (con descuento; misma base que "Total vendido" del reporte de ventas)
+      monto_membresia: Number(monto_membresia) || 0,
+      es_congelado: id_tipo_extension === MembresiaSeguimientoService.ID_EXTENSION_CONGELAMIENTO,
+      es_regalo: id_tipo_extension === MembresiaSeguimientoService.ID_EXTENSION_REGALO,
+    }));
+  }
+
   // Todas las membresías vigentes (flag=true) de un cliente, la que vence más tarde primero.
+  /**
+   * Por cada seguimiento pedido:
+   * - anteriores: membresías (seguimientos vigentes) del mismo cliente que vencen antes que esa (mismo vencimiento:
+   *   la de menor id va antes); no cuenta la propia.
+   * - clases_consumidas: días distintos (de Perú) con asistencia del cliente entre el inicio de la membresía y su
+   *   vencimiento (mismo criterio que dias_asistidos de findDetalleByIdCli).
+   * Una fila por id pedido.
+   */
+  async historial(ids: number[]) {
+    if (!ids.length) return [];
+    const enIds = ids.map((_, i) => `@${i}`).join(',');
+    const [filas, asistencias]: [
+      { id: number, id_cli: number, anteriores: number, fecha_inicio: string | null, fecha_vencimiento: string }[],
+      { id_persona: number, fecha_registro: Date }[],
+    ] = await Promise.all([
+      this.membresiaSeguimientoRepository.query(`
+        SELECT s.id, s.id_cli,
+          (SELECT COUNT(*) FROM membresia_seguimiento o
+            WHERE o.id_cli = s.id_cli AND o.flag = 1 AND o.id <> s.id
+              AND (o.fecha_vencimiento < s.fecha_vencimiento OR (o.fecha_vencimiento = s.fecha_vencimiento AND o.id < s.id))) AS anteriores,
+          CONVERT(varchar(10), d.fecha_inicio, 23) AS fecha_inicio,
+          CONVERT(varchar(10), s.fecha_vencimiento, 23) AS fecha_vencimiento
+        FROM membresia_seguimiento s
+        OUTER APPLY (
+          SELECT TOP 1 dm.fecha_inicio FROM detalleventa_membresia dm
+          WHERE dm.id_venta = s.id_venta AND dm.flag = 1
+          ORDER BY dm.id DESC
+        ) d
+        WHERE s.flag = 1 AND s.id IN (${enIds})
+      `, ids),
+      this.membresiaSeguimientoRepository.query(`
+        SELECT a.id_persona, a.fecha_registro FROM persona_eventos_asistencia a
+        WHERE a.flag = 1 AND a.id_persona IN (SELECT s.id_cli FROM membresia_seguimiento s WHERE s.id IN (${enIds}))
+      `, ids),
+    ]);
+    // El día se saca en Node: la hora guardada es la del servidor (ver rango-dia-local)
+    const diasPorCliente = new Map<number, Set<string>>();
+    for (const a of asistencias) {
+      if (!diasPorCliente.has(a.id_persona)) diasPorCliente.set(a.id_persona, new Set());
+      diasPorCliente.get(a.id_persona)!.add(diaLocal(a.fecha_registro));
+    }
+    const porId = new Map(filas.map((f) => {
+      const dias = [...(diasPorCliente.get(f.id_cli) ?? [])];
+      const clases_consumidas = dias.filter((dia) => (!f.fecha_inicio || dia >= f.fecha_inicio) && dia <= f.fecha_vencimiento).length;
+      return [f.id, { anteriores: Number(f.anteriores), clases_consumidas, fecha_inicio: f.fecha_inicio }];
+    }));
+    return ids.map((id) => ({
+      id,
+      anteriores: porId.get(id)?.anteriores ?? 0,
+      clases_consumidas: porId.get(id)?.clases_consumidas ?? 0,
+      // Inicio de la membresía (yyyy-mm-dd; null si la venta no lo tiene)
+      fecha_inicio: porId.get(id)?.fecha_inicio ?? null,
+    }));
+  }
+
   async findAllByIdCli(id_cli: number) {
     return await this.membresiaSeguimientoRepository.find({
       where: { id_cli, flag: true },

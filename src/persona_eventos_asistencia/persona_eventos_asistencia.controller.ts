@@ -48,6 +48,12 @@ export class PersonaEventosAsistenciaController {
     return this.personaEventosAsistenciaService.reporteClientes(filtros);
   }
 
+  // Días que asistió cada persona en los últimos ?dias= (hoy incluido, días de Perú) y días desde su última asistencia; ?ids=1,2,3
+  @Get('/dias-asistidos')
+  diasAsistidos(@Query('ids') ids: string = '', @Query('dias') dias: string = '30') {
+    return this.personaEventosAsistenciaService.diasAsistidos(ids.split(',').map(Number).filter((id) => id > 0), Number(dias) || 30);
+  }
+
   // Búsqueda paginada; ?fecha_inicio=&fecha_fin= (yyyy-mm-dd) filtra por la fecha de registro
   @Get('/search')
   async search(@Query() buscarAsistenciasDto: BuscarAsistenciasDto) {

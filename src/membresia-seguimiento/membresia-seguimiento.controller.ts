@@ -28,6 +28,21 @@ export class MembresiaSeguimientoController {
     };
   }
 
+  /** Clientes activos: una fila por cliente con su membresía que vence más tarde, si vence después de hoy */
+  @Get('/activos')
+  activos() {
+    return this.membresiaSeguimientoService.activos();
+  }
+
+  /**
+   * Por seguimiento (?ids=1,2,3): cuántas membresías del mismo cliente vencen antes que esa (renovaciones anteriores)
+   * y las clases consumidas de esa membresía (días con asistencia entre su inicio y su vencimiento)
+   */
+  @Get('/historial')
+  historial(@Query('ids') ids: string = '') {
+    return this.membresiaSeguimientoService.historial(ids.split(',').map(Number).filter((id) => id > 0));
+  }
+
   /** Membresías (seguimiento) de un cliente, la que vence más tarde primero */
   @Get('/id_cli/:id_cli')
   findAllByIdCli(@Param('id_cli', ParseIntPipe) id_cli: number) {

@@ -11,7 +11,6 @@ import { EntrenamientoPlan } from 'src/entrenamiento_plan/entities/entrenamiento
 import { MembresiaSeguimientoService } from 'src/membresia-seguimiento/membresia-seguimiento.service';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
-import { diaLocal } from 'src/common/helpers/rango-dia-local';
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -80,15 +79,11 @@ export class MembresiaExtensionService {
   }
 
   /**
-   * Reglas de las fechas de un congelamiento (6089) de una venta:
-   * - empieza desde hoy (Perú) y no antes del inicio de la membresía;
-   * - empieza a más tardar el día de vencimiento actual de la membresía;
-   * - no se cruza con otro congelamiento activo de la misma venta (excluirId: el que se edita).
+   * Un congelamiento o regalo de una venta empieza dentro de su membresía:
+   * no antes de su inicio y a más tardar el día de su vencimiento actual.
    * Si no cumple, BadRequestException con el motivo.
    */
-  private async validarFechasCongelamiento(id_venta: number, inicio: string, fin: string, excluirId?: number) {
-    if (fin < inicio) throw new BadRequestException('La fecha fin no puede ser anterior a la fecha de inicio');
-
+  private async validarInicioEnMembresia(id_venta: number, inicio: string, nombre: string) {
     const [membresia]: { inicio_membresia: string | null, vencimiento: string }[] = await this.membresiaExtensionRepository.query(`
       SELECT TOP 1
         CONVERT(varchar(10), d.fecha_inicio, 23) AS inicio_membresia,
@@ -100,17 +95,25 @@ export class MembresiaExtensionService {
       ) d
       WHERE s.id_venta = @0 AND s.flag = 1
     `, [id_venta]);
-    if (!membresia) throw new BadRequestException('La venta no tiene una membresía activa para congelar');
+    if (!membresia) throw new BadRequestException('La venta no tiene una membresía activa');
 
-    const hoy = diaLocal(new Date());
-    const minimo = membresia.inicio_membresia && membresia.inicio_membresia > hoy ? membresia.inicio_membresia : hoy;
-    if (inicio < minimo) {
-      throw new BadRequestException(`El congelamiento debe empezar desde el ${this.textoDia(minimo)}`
-        + (minimo === hoy ? ' (hoy)' : ' (inicio de la membresía)'));
+    if (membresia.inicio_membresia && inicio < membresia.inicio_membresia) {
+      throw new BadRequestException(`${nombre} debe empezar desde el ${this.textoDia(membresia.inicio_membresia)} (inicio de la membresía)`);
     }
     if (inicio > membresia.vencimiento) {
-      throw new BadRequestException(`El congelamiento debe empezar a más tardar el ${this.textoDia(membresia.vencimiento)} (vencimiento de la membresía)`);
+      throw new BadRequestException(`${nombre} debe empezar a más tardar el ${this.textoDia(membresia.vencimiento)} (vencimiento de la membresía)`);
     }
+  }
+
+  /**
+   * Reglas de las fechas de un congelamiento (6089) de una venta:
+   * - empieza dentro de la membresía (de su inicio a su vencimiento);
+   * - no se cruza con otro congelamiento activo de la misma venta (excluirId: el que se edita).
+   * Si no cumple, BadRequestException con el motivo.
+   */
+  private async validarFechasCongelamiento(id_venta: number, inicio: string, fin: string, excluirId?: number) {
+    if (fin < inicio) throw new BadRequestException('La fecha fin no puede ser anterior a la fecha de inicio');
+    await this.validarInicioEnMembresia(id_venta, inicio, 'El congelamiento');
 
     const [cruce]: { fecha_inicio: string, fecha_fin: string }[] = await this.membresiaExtensionRepository.query(`
       SELECT TOP 1 CONVERT(varchar(10), fecha_inicio, 23) AS fecha_inicio, CONVERT(varchar(10), fecha_fin, 23) AS fecha_fin
@@ -154,8 +157,18 @@ export class MembresiaExtensionService {
         throw new BadRequestException('dias_habiles es obligatorio (y mayor a 0) cuando id_tipo_extension es 6090');
       }
       dias_habiles = createMembresiaExtensionDto.dias_habiles;
-      fecha_inicio = new Date(fechaVencimientoActual);
-      fecha_fin = new Date(fecha_inicio.getTime() + dias_habiles * MS_POR_DIA);
+      if (createMembresiaExtensionDto.fecha_inicio) {
+        // Desde el día elegido, dentro de la membresía (de su inicio a su vencimiento)
+        const inicio = this.aDia(createMembresiaExtensionDto.fecha_inicio);
+        if (!createMembresiaExtensionDto.id_venta) throw new BadRequestException('id_venta es obligatorio para un regalo con fecha de inicio');
+        await this.validarInicioEnMembresia(createMembresiaExtensionDto.id_venta, inicio, 'El regalo');
+        fecha_inicio = inicio as unknown as Date;
+        fecha_fin = new Date(Date.parse(inicio) + dias_habiles * MS_POR_DIA).toISOString().slice(0, 10) as unknown as Date;
+      } else {
+        // Sin fecha: empieza en el vencimiento actual
+        fecha_inicio = new Date(fechaVencimientoActual);
+        fecha_fin = new Date(fecha_inicio.getTime() + dias_habiles * MS_POR_DIA);
+      }
     }
 
     try {
