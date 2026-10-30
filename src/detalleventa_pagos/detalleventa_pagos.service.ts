@@ -7,6 +7,7 @@ import { DetalleventaPago } from './entities/detalleventa_pago.entity';
 import { Venta } from 'src/venta/entities/venta.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { recalcularTotalesVenta } from 'src/common/helpers/recalcular-totales-venta';
+import { RangoFechasDto } from 'src/venta/dto/rango-fechas.dto';
 
 @Injectable()
 export class DetalleventaPagosService {
@@ -106,6 +107,41 @@ export class DetalleventaPagosService {
     return {
       lista,
       total
+    }
+  }
+
+  // Pagos activos (de ventas activas) con fecha_pago entre fecha_inicio y fecha_fin (yyyy-MM-dd), sin paginar:
+  // los ingresos de un periodo, ej. el de una meta. Trae el tipo de cliente y el documento desde la venta.
+  async findByRangoFechas({ fecha_inicio, fecha_fin }: RangoFechasDto) {
+    const fechaDesde = fecha_inicio.slice(0, 10);
+    const fechaHasta = fecha_fin.slice(0, 10);
+    if (fechaHasta < fechaDesde) {
+      throw new BadRequestException('fecha_fin no puede ser anterior a fecha_inicio');
+    }
+    const lista = await this.detalleventaPagoRepository
+      .createQueryBuilder('p')
+      .innerJoin(Venta, 'v', 'v.id = p.id_venta')
+      .select([
+        'p.id AS id', 'p.id_venta AS id_venta', `CONVERT(varchar(10), p.fecha_pago, 23) AS fecha_pago`,
+        'p.id_forma_pago AS id_forma_pago', 'p.monto AS monto', 'p.n_comprobante AS n_comprobante',
+        'p.id_empl AS id_empl', 'p.label_nombres_apellidos_empl AS label_nombres_apellidos_empl',
+        'p.label_nombres_apellidos_cli AS label_nombres_apellidos_cli', 'v.label_documento_cli AS label_documento_cli',
+        'v.id_tipo_cli AS id_tipo_cli', 'v.label_tipo_cli AS label_tipo_cli',
+        'v.montoTotal_membresia AS montoTotal_membresia', 'v.montoTotal_productos AS montoTotal_productos',
+      ])
+      .where('p.flag = 1 AND v.flag = 1')
+      .andWhere('p.fecha_pago BETWEEN :fechaDesde AND :fechaHasta', { fechaDesde, fechaHasta })
+      .orderBy('p.fecha_pago', 'ASC')
+      .getRawMany();
+
+    return {
+      // monto_venta: total de la venta del pago (membresías + productos)
+      lista: lista.map(({ montoTotal_membresia, montoTotal_productos, ...pago }) => ({
+        ...pago,
+        monto: Number(pago.monto) || 0,
+        monto_venta: (Number(montoTotal_membresia) || 0) + (Number(montoTotal_productos) || 0),
+      })),
+      total: lista.length
     }
   }
 

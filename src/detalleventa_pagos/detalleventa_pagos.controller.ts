@@ -3,6 +3,7 @@ import { DetalleventaPagosService } from './detalleventa_pagos.service';
 import { CreateDetalleventaPagoDto } from './dto/create-detalleventa_pago.dto';
 import { UpdateDetalleventaPagoDto } from './dto/update-detalleventa_pago.dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { RangoFechasDto } from 'src/venta/dto/rango-fechas.dto';
 
 @Controller('detalleventa-pagos')
 export class DetalleventaPagosController {
@@ -23,6 +24,12 @@ export class DetalleventaPagosController {
   @Get()
   findAll(@Query() paginationDto: PaginationDto) {
     return this.detalleventaPagosService.findAll(paginationDto);
+  }
+
+  // Ingresos de un periodo: ej. GET /detalleventa-pagos/rango-fechas?fecha_inicio=2026-08-01&fecha_fin=2026-08-31
+  @Get('/rango-fechas')
+  findByRangoFechas(@Query() rangoFechasDto: RangoFechasDto) {
+    return this.detalleventaPagosService.findByRangoFechas(rangoFechasDto);
   }
 
   @Get('/id_venta/:id_venta')
