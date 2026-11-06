@@ -7,16 +7,16 @@ export class AgendaNutricionista {
     id?: number;
 
     @Column({ type: 'int' })
-    id_cli?: number; // PERSONA.ENTITY (id_tipo 2)=>[id]
+    id_cli?: number; // PERSONA.ENTITY (id_tipo 2)=>[id]; 0 en las citas "Importante"
 
     @Column({ type: 'varchar', length: 180, nullable: true })
-    label_nombres_apellidos_cli?: string; // PERSONA.ENTITY=>[nombres, apellido_paterno, apellido_materno]
+    label_nombres_apellidos_cli?: string | null; // PERSONA.ENTITY=>[nombres, apellido_paterno, apellido_materno]
 
     @Column({ type: 'int' })
-    id_empl?: number; // PERSONA.ENTITY (id_tipo 1)=>[id]: el nutricionista
+    id_empl?: number; // PERSONA.ENTITY (id_tipo 1)=>[id]: el nutricionista; 0 en las citas "Importante"
 
     @Column({ type: 'varchar', length: 180, nullable: true })
-    label_nombres_apellidos_empl?: string; // PERSONA.ENTITY=>[nombres, apellido_paterno, apellido_materno]
+    label_nombres_apellidos_empl?: string | null; // PERSONA.ENTITY=>[nombres, apellido_paterno, apellido_materno]
 
     @Column({ type: 'date' })
     fecha?: string; // yyyy-MM-dd

@@ -1,17 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { AgendaNutricionistaService } from './agenda-nutricionista.service';
 import { CreateAgendaNutricionistaDto } from './dto/create-agenda-nutricionista.dto';
 import { UpdateAgendaNutricionistaDto } from './dto/update-agenda-nutricionista.dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { BuscarAgendaRangoDto } from './dto/buscar-agenda-rango.dto';
+import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
+import { GetUser } from 'src/user/decorator/get-user.decorator';
 
+// Con sesión: las citas "Importante" solo las crea y modifica un super usuario
+@UseGuards(JwtAuthGuard)
 @Controller('agenda-nutricionista')
 export class AgendaNutricionistaController {
   constructor(private readonly agendaNutricionistaService: AgendaNutricionistaService) {}
 
   @Post()
-  create(@Body() createAgendaNutricionistaDto: CreateAgendaNutricionistaDto) {
-    return this.agendaNutricionistaService.create(createAgendaNutricionistaDto);
+  create(@Body() createAgendaNutricionistaDto: CreateAgendaNutricionistaDto, @GetUser('id') idUser: number) {
+    return this.agendaNutricionistaService.create(createAgendaNutricionistaDto, idUser);
   }
 
   @Get()
@@ -42,12 +46,12 @@ export class AgendaNutricionistaController {
   }
 
   @Patch('/id/:id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto) {
-    return this.agendaNutricionistaService.update(id, updateAgendaNutricionistaDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto, @GetUser('id') idUser: number) {
+    return this.agendaNutricionistaService.update(id, updateAgendaNutricionistaDto, idUser);
   }
 
   @Delete('/id/:id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.agendaNutricionistaService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @GetUser('id') idUser: number) {
+    return this.agendaNutricionistaService.remove(id, idUser);
   }
 }

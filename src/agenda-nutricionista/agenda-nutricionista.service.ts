@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateAgendaNutricionistaDto } from './dto/create-agenda-nutricionista.dto';
@@ -6,6 +6,7 @@ import { UpdateAgendaNutricionistaDto } from './dto/update-agenda-nutricionista.
 import { AgendaNutricionista } from './entities/agenda-nutricionista.entity';
 import { Persona } from 'src/persona/entities/persona.entity';
 import { Terminologia } from 'src/terminologia/entities/terminologia.entity';
+import { User } from 'src/user/entities/user.entity';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { FullTextSearchService } from 'src/common/FullTextSearchService.service';
 import { AgendaNutricionistaGateway } from './agenda-nutricionista.gateway';
@@ -13,6 +14,16 @@ import { BuscarAgendaRangoDto } from './dto/buscar-agenda-rango.dto';
 
 const ID_TIPO_COLABORADOR = 1;
 const ID_TIPO_CLIENTE = 2;
+
+const esImportante = (label_estado?: string | null) => label_estado?.trim().toLowerCase() === 'importante';
+
+/** Una cita "Importante" solo ocupa el horario: no guarda cliente ni nutricionista */
+const SIN_PERSONAS: Partial<AgendaNutricionista> = {
+  id_cli: 0,
+  label_nombres_apellidos_cli: null,
+  id_empl: 0,
+  label_nombres_apellidos_empl: null,
+};
 
 const nombreCompleto = (persona: Persona) =>
   `${persona.nombres ?? ''} ${persona.apellido_paterno ?? ''} ${persona.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim();
@@ -27,6 +38,8 @@ export class AgendaNutricionistaService {
     private readonly personaRepository: Repository<Persona>,
     @InjectRepository(Terminologia)
     private readonly terminologiaRepository: Repository<Terminologia>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly fullTextSearchService: FullTextSearchService,
     private readonly agendaGateway: AgendaNutricionistaGateway,
   ){}
@@ -34,9 +47,17 @@ export class AgendaNutricionistaService {
   /**
    * Labels a partir de los ids que vienen (los que no vienen no se tocan). Valida que el cliente sea cliente,
    * el nutricionista sea colaborador y el estado exista en la terminología.
+   * Si el estado es (o sigue siendo, con estadoActual) "Importante": cliente y nutricionista en 0, sin validarlos.
    */
-  private async getLabels(dto: { id_cli?: number, id_empl?: number, id_estado?: number }) {
+  private async getLabels(dto: { id_cli?: number, id_empl?: number, id_estado?: number }, estadoActual?: string | null) {
     const labels: Partial<AgendaNutricionista> = {};
+
+    if (dto.id_estado !== undefined) {
+      const estado = await this.terminologiaRepository.findOneBy({ id: dto.id_estado });
+      if (!estado) throw new BadRequestException('El estado no existe');
+      labels.label_estado = estado.valor;
+    }
+    if (esImportante(labels.label_estado ?? estadoActual)) return { ...labels, ...SIN_PERSONAS };
 
     if (dto.id_cli !== undefined) {
       const cliente = await this.personaRepository.findOneBy({ id: dto.id_cli, id_tipo: ID_TIPO_CLIENTE, flag: true });
@@ -48,12 +69,12 @@ export class AgendaNutricionistaService {
       if (!empleado) throw new BadRequestException('El nutricionista (colaborador) no existe');
       labels.label_nombres_apellidos_empl = nombreCompleto(empleado);
     }
-    if (dto.id_estado !== undefined) {
-      const estado = await this.terminologiaRepository.findOneBy({ id: dto.id_estado });
-      if (!estado) throw new BadRequestException('El estado no existe');
-      labels.label_estado = estado.valor;
-    }
     return labels;
+  }
+
+  private async esSuperUsuario(idUser: number) {
+    const usuario = await this.userRepository.findOne({ where: { id: idUser }, select: { id: true, is_super_user: true } });
+    return !!usuario?.is_super_user;
   }
 
   /** "HH:mm" a minutos desde las 00:00 */
@@ -78,14 +99,14 @@ export class AgendaNutricionistaService {
     `, [fecha.slice(0, 10), excluirId, fin, inicio]);
     if (cruce) {
       const hhmm = (minutos: number) => `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
-      throw new BadRequestException(
-        `Se cruza con el evento de ${cruce.label_nombres_apellidos_cli ?? ''} (${hhmm(cruce.inicio)} - ${hhmm(cruce.inicio + cruce.duracionxmin)})`,
-      );
+      const evento = cruce.label_nombres_apellidos_cli ? `el evento de ${cruce.label_nombres_apellidos_cli}` : 'un evento importante';
+      throw new BadRequestException(`Se cruza con ${evento} (${hhmm(cruce.inicio)} - ${hhmm(cruce.inicio + cruce.duracionxmin)})`);
     }
   }
 
-  async create(createAgendaNutricionistaDto: CreateAgendaNutricionistaDto) {
+  async create(createAgendaNutricionistaDto: CreateAgendaNutricionistaDto, idUser: number) {
     const labels = await this.getLabels(createAgendaNutricionistaDto);
+    if (esImportante(labels.label_estado) && !(await this.esSuperUsuario(idUser))) throw new ForbiddenException('Solo un super usuario puede marcar una cita como importante');
     const { fecha, hora_inicio, duracionxmin } = createAgendaNutricionistaDto;
     await this.validarCruce(fecha, hora_inicio, duracionxmin);
     try {
@@ -151,9 +172,17 @@ export class AgendaNutricionistaService {
     return cita;
   }
 
-  async update(id: number, updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto) {
+  async update(id: number, updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto, idUser: number) {
     const actual = await this.findOne(id);
-    const labels = await this.getLabels(updateAgendaNutricionistaDto);
+    const labels = await this.getLabels(updateAgendaNutricionistaDto, actual.label_estado);
+    if ((esImportante(actual.label_estado) || esImportante(labels.label_estado)) && !(await this.esSuperUsuario(idUser))) {
+      throw new ForbiddenException('Solo un super usuario puede marcar o editar una cita importante');
+    }
+    // Deja de ser importante: ahora necesita cliente y nutricionista
+    const { id_cli, id_empl } = updateAgendaNutricionistaDto;
+    if (esImportante(actual.label_estado) && !esImportante(labels.label_estado ?? actual.label_estado) && (!id_cli || !id_empl)) {
+      throw new BadRequestException('Selecciona el cliente y el nutricionista');
+    }
     // Con los valores que quedarán (los que no vienen se mantienen)
     await this.validarCruce(
       String(updateAgendaNutricionistaDto.fecha ?? actual.fecha),
@@ -171,8 +200,9 @@ export class AgendaNutricionistaService {
   }
 
   /** Borrado lógico */
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(id: number, idUser: number) {
+    const { label_estado } = await this.findOne(id);
+    if (esImportante(label_estado) && !(await this.esSuperUsuario(idUser))) throw new ForbiddenException('Solo un super usuario puede eliminar una cita importante');
     await this.agendaRepository.update(id, { flag: false });
     this.agendaGateway.notificarCambio({ accion: 'eliminar', id });
     return { ok: true, msg: 'eliminado con exito' };

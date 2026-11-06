@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
 
 @Entity({ name: 'persona' })
 export class Persona {
@@ -23,6 +23,18 @@ export class Persona {
     // las personas que ya existían al agregar la columna toman esa fecha)
     @CreateDateColumn()
     createdAt?:Date;
+
+    // Fecha y hora de la última modificación; automática en cada UPDATE (GETDATE() por defecto)
+    @UpdateDateColumn()
+    updatedAt?:Date;
+
+    // Usuario que registró la persona; 0 si no se sabe (las que ya existían)
+    @Column('int', { default: 0 })
+    iduser_created?:number;
+
+    // Usuario que la modificó por última vez; 0 si no se sabe
+    @Column('int', { default: 0 })
+    iduser_lastupdate?:number;
 
     @Column('varchar', {
         length: 150,
