@@ -77,6 +77,12 @@ export class PersonaController {
     return this.personaService.existeDocumento(id_tipo, Number(idTipoDocumento), numeroDocumento, excluirId ? Number(excluirId) : undefined);
   }
 
+  /** Uid de la persona, para enlazar a su perfil cuando solo se tiene el id */
+  @Get('/id_tipo/:id_tipo/id/:id/uid')
+  findUid(@Param('id_tipo', ParseIntPipe) id_tipo: number, @Param('id', ParseIntPipe) id: number) {
+    return this.personaService.findUid(id_tipo, id);
+  }
+
   @Get('/id_tipo/:id_tipo/uid/:uid')
   findOneByUid(@Param('id_tipo') id_tipo: number, @Param('uid') uid: string) {
     return this.personaService.findOneByUid(id_tipo, uid);

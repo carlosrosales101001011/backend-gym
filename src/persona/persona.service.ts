@@ -439,6 +439,12 @@ export class PersonaService {
     return { existe: !!persona, persona: persona ?? null };
   }
 
+  async findUid(id_tipo: number, id: number) {
+    const persona = await this.personaRepository.findOne({ where: { id, id_tipo }, select: { id: true, uid: true } });
+    if (!persona) throw new NotFoundException('Persona no encontrada');
+    return { uid: persona.uid };
+  }
+
   async findOneByUid(id_tipo: number, uuid: string) {
     try {
       const persona = await this.personaRepository.findOne({ where: {uid: uuid, id_tipo}});
@@ -451,7 +457,11 @@ export class PersonaService {
         ...dto
       } = persona;
 
-      return { ...dto, avatar: await this.avatarActual(persona.uid_avatar) };
+      // Personas antiguas: tienen id_tipo_documento pero el label vacío; se busca sin tocar la base
+      const label_tipo_documento = persona.label_tipo_documento
+        || (await this.getTerminologiaLabels({ id_tipo_documento: persona.id_tipo_documento })).label_tipo_documento;
+
+      return { ...dto, label_tipo_documento, avatar: await this.avatarActual(persona.uid_avatar) };
     } catch (error) {
       this.handleDBExceptions(error);
     }
