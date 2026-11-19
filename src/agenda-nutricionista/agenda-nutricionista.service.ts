@@ -135,17 +135,20 @@ export class AgendaNutricionistaService {
    * Citas activas entre fecha_inicio y fecha_fin (ambas inclusive), en orden de fecha y hora.
    * Con q se ignora el rango: todas las citas de los clientes cuyo nombre contiene q (sin distinguir tildes ni mayúsculas).
    */
-  async findRango({ fecha_inicio, fecha_fin, q }: BuscarAgendaRangoDto) {
+  async findRango({ fecha_inicio, fecha_fin, q, id_cli }: BuscarAgendaRangoDto) {
     const texto = q?.trim();
-    if (!texto && (!fecha_inicio || !fecha_fin)) {
-      throw new BadRequestException('fecha_inicio y fecha_fin son obligatorios (o q para buscar un cliente)');
+    if (!id_cli && !texto && (!fecha_inicio || !fecha_fin)) {
+      throw new BadRequestException('fecha_inicio y fecha_fin son obligatorios (o q / id_cli para buscar un cliente)');
     }
     const consulta = this.agendaRepository
       .createQueryBuilder('c')
       .where('c.flag = 1')
       .orderBy('c.fecha', 'ASC')
       .addOrderBy('c.hora_inicio', 'ASC');
-    if (texto) {
+    if (id_cli) {
+      // Todas las citas del cliente elegido (buscador de la agenda)
+      consulta.andWhere('c.id_cli = :id_cli', { id_cli });
+    } else if (texto) {
       consulta.andWhere('c.label_nombres_apellidos_cli COLLATE Latin1_General_CI_AI LIKE :q', { q: `%${texto}%` });
     } else {
       consulta.andWhere('c.fecha >= :fecha_inicio AND c.fecha <= :fecha_fin', { fecha_inicio, fecha_fin });

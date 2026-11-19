@@ -1,0 +1,5 @@
+-- =====================================================================
+-- Terminologías del card "Objetivo principal" del perfil del paciente
+--      ('perfil-paciente', 'tipos-objetivos', 'objetivos_principales')
+-- Insert básico: si se ejecuta dos veces, se duplican los valores.
+-- =====================================================================

@@ -3,7 +3,7 @@ import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { UpdateComentarioDto } from './dto/update-comentario.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Comentario } from './entities/comentario.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Persona } from 'src/persona/entities/persona.entity';
 import { avataresPorPersona } from 'src/persona/avatar-persona';
 import { User } from 'src/user/entities/user.entity';
@@ -64,6 +64,37 @@ export class ComentarioService {
       avatar_usuario: (comentario.usuario?.id_empl && avatares.get(comentario.usuario.id_empl)) || null,
     }));
   }
+  /** Últimos comentarios vigentes del usuario, con la persona comentada (por persona.uid_comentario = uid_location) */
+  async findMios(idUser: number, cantidad = 50) {
+    const comentarios = await this.comentarioRepository.find({
+      where: { id_user: idUser, flag: true },
+      order: { id: 'DESC' },
+      take: cantidad,
+      select: { id: true, uid_location: true, comentario: true, createdAt: true, updatedAt: true },
+    })
+    const uids = [...new Set(comentarios.map((c) => c.uid_location).filter((uid): uid is string => !!uid))]
+    const personas = uids.length
+      ? await this.personaRepository.find({
+          where: { uid_comentario: In(uids) },
+          select: { id: true, uid: true, uid_comentario: true, id_tipo: true, nombres: true, apellido_paterno: true, apellido_materno: true },
+        })
+      : []
+    const personaPorUid = new Map(personas.map((p) => [p.uid_comentario, p]))
+    return comentarios.map((comentario) => {
+      const persona = personaPorUid.get(comentario.uid_location)
+      return {
+        ...comentario,
+        persona: persona
+          ? {
+              uid: persona.uid,
+              id_tipo: persona.id_tipo,
+              nombre: `${persona.nombres ?? ''} ${persona.apellido_paterno ?? ''} ${persona.apellido_materno ?? ''}`.replace(/s+/g, ' ').trim(),
+            }
+          : null,
+      }
+    })
+  }
+
   async findOne(id: number) {
     const comentario =await this.comentarioRepository.findOneBy({id})
         

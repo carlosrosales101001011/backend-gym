@@ -17,6 +17,13 @@ export class ComentarioController {
     });
   }
 
+  /** Últimos comentarios que escribió el usuario de la sesión (nube de comentarios del Topbar) */
+  @UseGuards(JwtAuthGuard)
+  @Get('/usuario/mios')
+  findMios(@GetUser('id') idUser: number) {
+    return this.comentarioService.findMios(idUser);
+  }
+
   @Get('/:uid_location')
   findAll(@Param('uid_location') uid_location:string) {
     return this.comentarioService.findAll(uid_location);

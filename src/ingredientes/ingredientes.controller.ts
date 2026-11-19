@@ -1,0 +1,49 @@
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { IngredientesService } from './ingredientes.service';
+import { CreateIngredienteDto } from './dto/create-ingrediente.dto';
+import { UpdateIngredienteDto } from './dto/update-ingrediente.dto';
+import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
+
+/** Todas las rutas piden sesión iniciada */
+@UseGuards(JwtAuthGuard)
+@Controller('ingredientes')
+export class IngredientesController {
+  constructor(private readonly ingredientesService: IngredientesService) {}
+
+  @Post()
+  create(@Body() createIngredienteDto: CreateIngredienteDto) {
+    return this.ingredientesService.create(createIngredienteDto);
+  }
+
+  @Get()
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.ingredientesService.findAll(paginationDto);
+  }
+
+  @Get('/search')
+  search(@Query() paginationDto: PaginationDto) {
+    return this.ingredientesService.findSearch(paginationDto.q ?? '', paginationDto);
+  }
+
+  /** Ingredientes activos con sus unidades, para el formulario de recetas */
+  @Get('/opciones')
+  findOpciones() {
+    return this.ingredientesService.findOpciones();
+  }
+
+  @Get('/id/:id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.ingredientesService.findOne(id);
+  }
+
+  @Patch('/id/:id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateIngredienteDto: UpdateIngredienteDto) {
+    return this.ingredientesService.update(id, updateIngredienteDto);
+  }
+
+  @Delete('/id/:id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.ingredientesService.remove(id);
+  }
+}

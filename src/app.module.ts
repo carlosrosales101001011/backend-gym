@@ -59,6 +59,9 @@ import { PersonaEventosAsistenciaModule } from './persona_eventos_asistencia/per
 import { AgendaNutricionistaModule } from './agenda-nutricionista/agenda-nutricionista.module';
 import { CompromisosPagoClienteModule } from './compromisos-pago-cliente/compromisos-pago-cliente.module';
 import { NotificationPermisosModule } from './notification-permisos/notification-permisos.module';
+import { RecetasModule } from './recetas/recetas.module';
+import { IngredientesModule } from './ingredientes/ingredientes.module';
+import { PerfilNutricionalModule } from './perfil_nutricional/perfil_nutricional.module';
 @Module({
   providers: [TasksService],
   imports: [
@@ -138,6 +141,9 @@ import { NotificationPermisosModule } from './notification-permisos/notification
     AgendaNutricionistaModule,
     CompromisosPagoClienteModule,
     NotificationPermisosModule,
+    RecetasModule,
+    IngredientesModule,
+    PerfilNutricionalModule,
   ],
 })
 export class AppModule {}
