@@ -7,6 +7,7 @@ import { IsBoolean, IsDateString, IsInt, IsNumber, IsOptional, IsString, Max, Ma
 export class UpdatePerfilNutricionalDto {
     /** yyyy-MM-dd */
     @IsOptional() @IsDateString({ strict: true }) fecha?: string;
+    @IsOptional() @IsString() @MaxLength(80) nombrePerfil?: string | null;
 
     // ---- Fotos ----
     @IsOptional() @IsString() @MaxLength(100) uid_image_fotoPerfil?: string | null;

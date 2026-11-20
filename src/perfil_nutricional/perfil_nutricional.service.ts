@@ -12,11 +12,9 @@ export class PerfilNutricionalService {
     private readonly perfilRepository: Repository<PerfilNutricional>,
   ) {}
 
-  /** Agrega una fecha al paciente; si ya tiene esa fecha, devuelve la existente (no la duplica) */
-  async create({ id_cli, fecha }: CreatePerfilNutricionalDto) {
-    const existente = await this.perfilRepository.findOne({ where: { id_cli, fecha, flag: true } });
-    if (existente) return existente;
-    const { id } = await this.perfilRepository.save(this.perfilRepository.create({ id_cli, fecha }));
+  /** Agrega una fecha (con su nombre de perfil) al paciente */
+  async create({ id_cli, fecha, nombrePerfil }: CreatePerfilNutricionalDto) {
+    const { id } = await this.perfilRepository.save(this.perfilRepository.create({ id_cli, fecha, nombrePerfil: nombrePerfil.trim() }));
     return this.findOne(id!);
   }
 

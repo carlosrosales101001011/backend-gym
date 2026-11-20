@@ -21,6 +21,9 @@ export class PerfilNutricional {
     @Column({ type: 'date' })
     fecha?: string; // yyyy-MM-dd
 
+    @Column({ type: 'varchar', length: 80, nullable: true })
+    nombrePerfil?: string | null; // ej. "Evaluación inicial"
+
     // ---- Fotos ----
     @Column({ type: 'varchar', length: 100, nullable: true })
     uid_image_fotoPerfil?: string | null; // IMAGEN=>[uid]
