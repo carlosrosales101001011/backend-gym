@@ -90,6 +90,13 @@ export class PerfilNutricional {
     @Column(DECIMAL) masa_esqueletica?: number | null; // IME
     @Column(DECIMAL) mineral_oseo?: number | null; // kg
 
+    // ---- Análisis de composición corporal ----
+    @Column(DECIMAL) agua_corporal_total?: number | null; // L
+    @Column(DECIMAL) proteinas?: number | null; // kg
+    @Column(DECIMAL) minerales?: number | null; // kg
+    @Column(DECIMAL) masa_musculo_esqueletica?: number | null; // kg (MME)
+    @Column(DECIMAL) masa_grasa_corporal?: number | null; // kg
+
     @Column(TEXTO)
     observacion_corporal?: string | null;
 

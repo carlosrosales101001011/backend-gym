@@ -57,6 +57,11 @@ export class UpdatePerfilNutricionalDto {
     @IsOptional() @IsNumber() porcentaje_obesidad?: number | null;
     @IsOptional() @IsNumber() masa_esqueletica?: number | null;
     @IsOptional() @IsNumber() mineral_oseo?: number | null;
+    @IsOptional() @IsNumber() agua_corporal_total?: number | null;
+    @IsOptional() @IsNumber() proteinas?: number | null;
+    @IsOptional() @IsNumber() minerales?: number | null;
+    @IsOptional() @IsNumber() masa_musculo_esqueletica?: number | null;
+    @IsOptional() @IsNumber() masa_grasa_corporal?: number | null;
     @IsOptional() @IsString() observacion_corporal?: string | null;
 
     // ---- Antecedentes (ids de terminología separados por coma) ----
