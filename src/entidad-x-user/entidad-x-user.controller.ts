@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, UseGuards, Param, Post, Body } from '@nestjs/common';
 import { EntidadXUserService } from './entidad-x-user.service';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
@@ -10,8 +12,9 @@ export class EntidadXUserController {
 
   
   @Post('/bulk')
-  create(@Body() createEntidadXUserDto: CreateEntidadXUserDto[]) {
-    return this.entidadXUserService.createBulk(createEntidadXUserDto);
+  @UseGuards(JwtAuthGuard)
+  create(@Body() createEntidadXUserDto: CreateEntidadXUserDto[], @Auditor() auditor: ContextoAuditoria) {
+    return this.entidadXUserService.createBulk(createEntidadXUserDto, auditor);
   }
 
   @Get('/user/')

@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -32,6 +34,7 @@ export class CompromisosPagoClienteService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly fullTextSearchService: FullTextSearchService,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
   /**
@@ -78,12 +81,13 @@ export class CompromisosPagoClienteService {
     return usuario.id_empl;
   }
 
-  async create(createCompromisosPagoClienteDto: CreateCompromisosPagoClienteDto, idUser: number) {
-    const id_empl = await this.idEmplDelUsuario(idUser);
+  async create(createCompromisosPagoClienteDto: CreateCompromisosPagoClienteDto, auditor: ContextoAuditoria) {
+    const id_empl = await this.idEmplDelUsuario(auditor.id_user);
     const labels = await this.getLabels({ ...createCompromisosPagoClienteDto, id_empl });
     try {
       const compromiso = this.compromisoRepository.create({ ...createCompromisosPagoClienteDto, id_empl, ...labels });
       await this.compromisoRepository.save(compromiso);
+      await this.auditoriaService.registrarCreate({ ...auditor, tabla: 'compromisos_pago_cliente', id_registro: compromiso.id }, compromiso);
       return { ok: true, id: compromiso.id, msg: 'creado con exito' };
     } catch (error) {
       this.handleDBExceptions(error);
@@ -122,22 +126,25 @@ export class CompromisosPagoClienteService {
     return compromiso;
   }
 
-  async update(id: number, updateCompromisosPagoClienteDto: UpdateCompromisosPagoClienteDto) {
+  async update(id: number, updateCompromisosPagoClienteDto: UpdateCompromisosPagoClienteDto, auditor: ContextoAuditoria) {
     const actual = await this.findOne(id);
     const labels = await this.getLabels(updateCompromisosPagoClienteDto, actual.id_cli);
-    const compromiso = await this.compromisoRepository.preload({ id, ...updateCompromisosPagoClienteDto, ...labels });
+    const cambios = { ...updateCompromisosPagoClienteDto, ...labels };
+    const compromiso = await this.compromisoRepository.preload({ id, ...cambios });
     if (!compromiso) throw new NotFoundException(`No existe el compromiso ${id}`);
     try {
       await this.compromisoRepository.save(compromiso);
+      await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'compromisos_pago_cliente', id_registro: id }, actual, cambios);
       return { ok: true, msg: 'actualizado con exito' };
     } catch (error) {
       this.handleDBExceptions(error);
     }
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(id: number, auditor: ContextoAuditoria) {
+    const actual = await this.findOne(id);
     await this.compromisoRepository.update(id, { flag: false });
+    await this.auditoriaService.registrarDelete({ ...auditor, tabla: 'compromisos_pago_cliente', id_registro: id }, actual);
     return { ok: true, msg: 'eliminado con exito' };
   }
 

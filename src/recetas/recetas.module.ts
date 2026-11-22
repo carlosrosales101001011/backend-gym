@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RecetasService } from './recetas.service';
@@ -12,6 +13,6 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 @Module({
   controllers: [RecetasController],
   providers: [RecetasService, FullTextSearchService],
-  imports: [TypeOrmModule.forFeature([Receta, RecetasIngrediente, Ingrediente, IngredienteUnidad, IngredienteAlergeno])],
+  imports: [TypeOrmModule.forFeature([Receta, RecetasIngrediente, Ingrediente, IngredienteUnidad, IngredienteAlergeno]), UserAuditoriaModule],
 })
 export class RecetasModule {}

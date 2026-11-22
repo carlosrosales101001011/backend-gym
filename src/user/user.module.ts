@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
@@ -20,6 +21,7 @@ import { Persona } from 'src/persona/entities/persona.entity';
   imports: [
     ConfigModule,
       TypeOrmModule.forFeature([User, Terminologia, Persona]),
+      UserAuditoriaModule,
       PassportModule.register({defaultStrategy: 'jwt'}),  
       JwtModule.registerAsync({
         imports: [ConfigModule],

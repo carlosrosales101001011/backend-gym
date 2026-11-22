@@ -1,34 +1,19 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
+import { GetUser } from 'src/user/decorator/get-user.decorator';
 import { UserAuditoriaService } from './user-auditoria.service';
-import { CreateUserAuditoriaDto } from './dto/create-user-auditoria.dto';
-import { UpdateUserAuditoriaDto } from './dto/update-user-auditoria.dto';
 
 @Controller('user-auditoria')
 export class UserAuditoriaController {
   constructor(private readonly userAuditoriaService: UserAuditoriaService) {}
 
-  @Post()
-  create(@Body() createUserAuditoriaDto: CreateUserAuditoriaDto) {
-    return this.userAuditoriaService.create(createUserAuditoriaDto);
-  }
-
-  @Get()
-  findAll() {
-    return this.userAuditoriaService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userAuditoriaService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserAuditoriaDto: UpdateUserAuditoriaDto) {
-    return this.userAuditoriaService.update(+id, updateUserAuditoriaDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userAuditoriaService.remove(+id);
+  /** "Mis actividades" del Topbar: las últimas 50 del usuario de la sesión; id_accion opcional (6200, 6202, 6203, 6204) */
+  @Get('/mis-actividades')
+  @UseGuards(JwtAuthGuard)
+  misActividades(
+    @GetUser('id') idUser: number,
+    @Query('id_accion', new ParseIntPipe({ optional: true })) idAccion?: number,
+  ) {
+    return this.userAuditoriaService.misActividades(idUser, idAccion);
   }
 }

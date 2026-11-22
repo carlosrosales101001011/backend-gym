@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntidadXUser } from './entities/entidad-x-user.entity';
@@ -9,11 +11,16 @@ export class EntidadXUserService {
   constructor (
     @InjectRepository(EntidadXUser)
     private readonly EntidadXUserRepository:Repository<EntidadXUser>,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
-  async createBulk(createEntidadXUserDto: CreateEntidadXUserDto[]) {
+  async createBulk(createEntidadXUserDto: CreateEntidadXUserDto[], auditor: ContextoAuditoria) {
     const entidades = await this.EntidadXUserRepository.create(createEntidadXUserDto);
-    return await this.EntidadXUserRepository.save(entidades)
+    const guardadas = await this.EntidadXUserRepository.save(entidades)
+    // Un registro de auditoría por cada fila creada
+    await Promise.all(guardadas.map((fila) =>
+      this.auditoriaService.registrarCreate({ ...auditor, tabla: 'entidad_x_user', id_registro: fila.id }, fila)))
+    return guardadas
   }
   
   async findxIduser(iduser:number){

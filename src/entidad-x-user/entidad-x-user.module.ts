@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { EntidadXUserService } from './entidad-x-user.service';
 import { EntidadXUserController } from './entidad-x-user.controller';
@@ -7,6 +8,6 @@ import { EntidadXUser } from './entities/entidad-x-user.entity';
 @Module({
   controllers: [EntidadXUserController],
   providers: [EntidadXUserService],
-  imports: [TypeOrmModule.forFeature([EntidadXUser])]
+  imports: [TypeOrmModule.forFeature([EntidadXUser]), UserAuditoriaModule]
 })
 export class EntidadXUserModule {}

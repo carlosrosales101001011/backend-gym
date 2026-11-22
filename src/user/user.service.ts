@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, ForbiddenException, HttpException, Injectable, InternalServerErrorException, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -41,6 +43,7 @@ export class UserService {
     private readonly fullTextSearchService: FullTextSearchService,
 
     private readonly dataSource: DataSource,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
   // Los usuarios ya registrados toman el nombre de quien los registró (columna nueva)
@@ -74,7 +77,8 @@ export class UserService {
     return labels;
   }
 
-  async create(createUserDto: CreateUserDto, idUserParent: number) {
+  async create(createUserDto: CreateUserDto, auditor: ContextoAuditoria) {
+    const idUserParent = auditor.id_user;
     try {
       const { password, uuid, id, id_userParent, ...datos } = createUserDto;
       // Con colaborador vinculado, sus nombres, apellidos y correos reemplazan a los escritos
@@ -103,8 +107,9 @@ export class UserService {
 
       await this.userRepository.save(user);
 
-      // La contraseña (ni su hash) nunca vuelve al front
+      // La contraseña (ni su hash) nunca vuelve al front ni se audita
       const { password: _password, ...usuarioCreado } = user;
+      await this.auditoriaService.registrarCreate({ ...auditor, tabla: 'users', id_registro: user.id }, usuarioCreado);
       return {
         ...usuarioCreado,
         token: this.getJwtToken({uuid: user.uuid})
@@ -116,7 +121,7 @@ export class UserService {
     }
   }
 
-  async login(loginUserDto:LoginUserDto){
+  async login(loginUserDto:LoginUserDto, ip: string){
 
     const {password, email} = loginUserDto;
 
@@ -133,6 +138,7 @@ export class UserService {
     if (!this.hashService.esHash(user.password)) {
       await this.userRepository.update(user.id, { password: await this.hashService.hash(password) })
     }
+    await this.auditoriaService.registrarLogin({ id_user: user.id, ip, tabla: 'users', id_registro: user.id })
 
     return {
       email: user.email,
@@ -248,7 +254,7 @@ export class UserService {
   async findMe(id: number) {
     const user = await this.userRepository.findOne({
       where: { id },
-      select: { id: true, nombres: true, apellidos: true, label_rol: true, is_super_user: true, id_empl: true },
+      select: { id: true, nombres: true, apellidos: true, usuario: true, label_rol: true, is_super_user: true, id_empl: true },
     });
     if (!user) throw new NotFoundException('Usuario no encontrado');
     // Foto del usuario: la de su colaborador (users.id_empl → persona)
@@ -315,8 +321,10 @@ export class UserService {
   }
 
   /** Cambia super usuario, rol y colaborador vinculado de un usuario, según los permisos de quien lo hace */
-  async actualizarSistema(idUsuario: number, idAdmin: number, dto: ActualizarSistemaDto) {
-    const usuario = await this.userRepository.findOne({ where: { id: idUsuario, flag: true }, select: { id: true, id_userParent: true } });
+  async actualizarSistema(idUsuario: number, auditor: ContextoAuditoria, dto: ActualizarSistemaDto) {
+    const idAdmin = auditor.id_user;
+    // Fila completa (sin password: la columna es select false) para la auditoría
+    const usuario = await this.userRepository.findOne({ where: { id: idUsuario, flag: true } });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
     const { puedeEditar, puedeMarcarSuper } = await this.permisosSobre(usuario, idAdmin);
     if (!puedeEditar) throw new ForbiddenException('Solo quien registró a este usuario o un super usuario puede modificarlo');
@@ -332,7 +340,9 @@ export class UserService {
 
     const labels = dto.id_rol !== undefined ? await this.getTerminologiaLabels({ id_rol: dto.id_rol }) : {};
     if (dto.id_rol !== undefined && !labels.label_rol) throw new BadRequestException('El rol elegido no existe');
-    await this.userRepository.update(idUsuario, { ...dto, ...labels, ...datosColaborador });
+    const cambios = { ...dto, ...labels, ...datosColaborador };
+    await this.userRepository.update(idUsuario, cambios);
+    await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'users', id_registro: idUsuario }, usuario, cambios);
     return { ok: true, msg: 'Datos de sistema actualizados' };
   }
 
@@ -362,11 +372,13 @@ export class UserService {
    * Elimina (flag = 0) al usuario junto con sus módulos, las secciones de esos módulos y sus permisos por entidad.
    * Solo puede quien lo registró (id_userParent) o un super usuario; nadie a sí mismo.
    */
-  async eliminar(idUsuario: number, idAdmin: number) {
+  async eliminar(idUsuario: number, auditor: ContextoAuditoria) {
+    const idAdmin = auditor.id_user;
     if (idUsuario === idAdmin) throw new ForbiddenException('No puedes eliminarte a ti mismo')
     const [admin, usuario] = await Promise.all([
       this.userRepository.findOne({ where: { id: idAdmin }, select: { id: true, is_super_user: true } }),
-      this.userRepository.findOne({ where: { id: idUsuario, flag: true }, select: { id: true, id_userParent: true } }),
+      // Fila completa (sin password) para la auditoría
+      this.userRepository.findOne({ where: { id: idUsuario, flag: true } }),
     ])
     if (!usuario) throw new NotFoundException('Usuario no encontrado')
     const puede = !!admin && (admin.is_super_user || usuario.id_userParent === admin.id)
@@ -381,6 +393,7 @@ export class UserService {
       await manager.update(EntidadXUser, { id_user: idUsuario }, { flag: false })
       await manager.update(User, { id: idUsuario }, { flag: false })
     })
+    await this.auditoriaService.registrarDelete({ ...auditor, tabla: 'users', id_registro: idUsuario }, usuario)
     return { ok: true, msg: 'Usuario eliminado' }
   }
 }

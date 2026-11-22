@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { ComentarioService } from './comentario.service';
 import { ComentarioController } from './comentario.controller';
@@ -10,7 +11,8 @@ import { User } from 'src/user/entities/user.entity';
   controllers: [ComentarioController],
   providers: [ComentarioService],
   imports: [
-    TypeOrmModule.forFeature([Comentario, Persona, User])
+    TypeOrmModule.forFeature([Comentario, Persona, User]),
+    UserAuditoriaModule,
   ]
 })
 export class ComentarioModule {}

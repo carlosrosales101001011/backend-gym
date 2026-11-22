@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { v4 as uidv4 } from 'uuid';
 import { CreateModuloXUserDto } from './dto/create-modulo-x-user.dto';
@@ -16,8 +18,11 @@ import { Seccion } from 'src/seccion/entities/seccion.entity';
 /** Módulo de un usuario con las secciones que tiene en él (seccion_x_modulouser activas) */
 type ModuloUsuarioConSecciones = Omit<ModuloXUser, 'secciones'> & { secciones: Seccion[] };
 
+/** Acciones de auditoría que se registran después de que la transacción termina bien */
+type AuditoriaPendiente = () => Promise<unknown>;
+
 /** Datos del usuario que se muestran en la gestión de módulos (nunca la contraseña) */
-const CAMPOS_USUARIO = { id: true, uuid: true, nombres: true, apellidos: true, usuario: true, label_rol: true, label_nombres_apellidos_userParent: true } as const;
+const CAMPOS_USUARIO = { id: true, uuid: true, nombres: true, apellidos: true, usuario: true, label_rol: true, label_nombres_apellidos_userParent: true, id_estado: true } as const;
 
 @Injectable()
 export class ModuloXUserService implements OnModuleInit {
@@ -35,6 +40,7 @@ export class ModuloXUserService implements OnModuleInit {
     private readonly seccionRepository:Repository<Seccion>,
     private readonly fullTextSearchService: FullTextSearchService,
     private readonly dataSource: DataSource,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
   // Los registros creados antes de existir la columna uid reciben uno al arrancar (solo los que no tienen)
@@ -55,10 +61,11 @@ export class ModuloXUserService implements OnModuleInit {
   }
 
   /** Guarda is_fijado de un módulo del usuario logueado; un módulo de otro usuario (o dado de baja) no se encuentra */
-  async cambiarFijado(id: number, idUser: number, is_fijado: boolean) {
-    const moduloUser = await this.ModuloXUserRepositorio.findOne({ select: { id: true }, where: { id, id_user: idUser, flag: true } });
+  async cambiarFijado(id: number, auditor: ContextoAuditoria, is_fijado: boolean) {
+    const moduloUser = await this.ModuloXUserRepositorio.findOne({ select: { id: true, is_fijado: true }, where: { id, id_user: auditor.id_user, flag: true } });
     if (!moduloUser) throw new NotFoundException('El módulo no es tuyo o no existe');
     await this.ModuloXUserRepositorio.update(id, { is_fijado });
+    await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'modulo_x_user', id_registro: id }, moduloUser, { is_fijado });
     return { ok: true, id, is_fijado };
   }
 
@@ -80,12 +87,15 @@ export class ModuloXUserService implements OnModuleInit {
       console.log({error});
     }
   }
-  async createBulk(createModuloXUserDto: CreateModuloXUserDto[]) {
+  async createBulk(createModuloXUserDto: CreateModuloXUserDto[], auditor: ContextoAuditoria) {
     try {
       const moduloUsers = await this.ModuloXUserRepositorio.create(
         createModuloXUserDto.map((dto) => ({ ...dto, uid: uidv4().toUpperCase() }))
       );
       const savedModuloUsers = await this.ModuloXUserRepositorio.save(moduloUsers);
+      // Un registro de auditoría por cada fila creada
+      await Promise.all(savedModuloUsers.map((fila) =>
+        this.auditoriaService.registrarCreate({ ...auditor, tabla: 'modulo_x_user', id_registro: fila.id }, fila)));
       return savedModuloUsers;
     } catch (error) {
       console.log(error);
@@ -219,7 +229,10 @@ export class ModuloXUserService implements OnModuleInit {
    * Secciones: en cada módulo que trae ids_seccion se dejan esas (crea, reactiva o quita con flag = 0),
    * solo entre las secciones que quien administra tiene en ese módulo. Los módulos quitados conservan las suyas.
    */
-  async asignarModulos(idUsuario: number, idAdmin: number, { modulos }: AsignarModulosDto) {
+  async asignarModulos(idUsuario: number, auditor: ContextoAuditoria, { modulos }: AsignarModulosDto) {
+    const idAdmin = auditor.id_user;
+    // Auditoría: create por módulo agregado (o reactivado), delete por quitado; se registra al terminar la transacción
+    const auditorias: AuditoriaPendiente[] = [];
     await this.validarAdministrable(idUsuario, idAdmin);
     const disponibles = await this.modulosDisponibles(idAdmin);
     const idsPermitidos = new Set(disponibles.map((m) => m.id!));
@@ -240,8 +253,8 @@ export class ModuloXUserService implements OnModuleInit {
       const repo = manager.getRepository(ModuloXUser);
       const existentes = idsPermitidos.size === 0 ? [] : await repo.find({
         where: { id_user: idUsuario, id_modulo: In([...idsPermitidos]) },
-        // flag no se trae por defecto: hace falta para reactivar los quitados
-        select: { id: true, id_modulo: true, flag: true },
+        // flag no se trae por defecto: hace falta para reactivar los quitados (el resto, para la auditoría)
+        select: { id: true, id_user: true, id_modulo: true, uid: true, is_fijado: true, is_favorito: true, flag: true },
         order: { id: 'ASC' },
       });
       // Si hay varios registros del mismo módulo se usa el activo, si no el primero
@@ -255,18 +268,32 @@ export class ModuloXUserService implements OnModuleInit {
       for (const { id_modulo, is_fijado, is_favorito, ids_seccion } of modulos) {
         const fila = porModulo.get(id_modulo);
         let idModuloUser = fila?.id;
-        if (fila) await repo.update(fila.id!, { flag: true, is_fijado, is_favorito });
-        else {
-          const { identifiers } = await repo.insert({ id_user: idUsuario, id_modulo, is_fijado, is_favorito, flag: true, uid: uidv4().toUpperCase() });
+        if (fila) {
+          const cambios = { flag: true, is_fijado, is_favorito };
+          await repo.update(fila.id!, cambios);
+          const base = { ...auditor, tabla: 'modulo_x_user', id_registro: fila.id };
+          // Ya lo tenía: update (solo si cambió fijado/favorito); estaba quitado: se vuelve a agregar (create)
+          auditorias.push(fila.flag
+            ? () => this.auditoriaService.registrarUpdate(base, fila, cambios)
+            : () => this.auditoriaService.registrarCreate(base, { ...fila, ...cambios }));
+        } else {
+          const nuevo = { id_user: idUsuario, id_modulo, is_fijado, is_favorito, flag: true, uid: uidv4().toUpperCase() };
+          const { identifiers } = await repo.insert(nuevo);
           idModuloUser = identifiers[0].id;
+          const id = idModuloUser;
+          auditorias.push(() => this.auditoriaService.registrarCreate({ ...auditor, tabla: 'modulo_x_user', id_registro: id }, { id, ...nuevo }));
         }
         if (ids_seccion) {
-          await this.sincronizarSecciones(manager.getRepository(SeccionXModulouser), idModuloUser!, ids_seccion, seccionesPermitidas.get(id_modulo)!);
+          await this.sincronizarSecciones(manager.getRepository(SeccionXModulouser), idModuloUser!, ids_seccion, seccionesPermitidas.get(id_modulo)!, auditor, auditorias);
         }
       }
-      const quitar = existentes.filter((fila) => fila.flag && !pedidos.has(fila.id_modulo!)).map((fila) => fila.id!);
+      const quitadas = existentes.filter((fila) => fila.flag && !pedidos.has(fila.id_modulo!));
+      const quitar = quitadas.map((fila) => fila.id!);
       if (quitar.length) await repo.update({ id: In(quitar) }, { flag: false });
+      quitadas.forEach((fila) => auditorias.push(() =>
+        this.auditoriaService.registrarDelete({ ...auditor, tabla: 'modulo_x_user', id_registro: fila.id }, fila)));
     });
+    await Promise.all(auditorias.map((registrar) => registrar()));
 
     return this.modulosDeUsuarios([idUsuario]);
   }
@@ -275,11 +302,14 @@ export class ModuloXUserService implements OnModuleInit {
    * Deja en un módulo del usuario las secciones pedidas: crea las nuevas, reactiva las quitadas (mismo
    * registro) y quita (flag = 0) las que ya no vienen. Solo entre las permitidas; las demás no se tocan.
    */
-  private async sincronizarSecciones(repo: Repository<SeccionXModulouser>, idModuloUser: number, idsSeccion: number[], permitidas: Set<number>) {
+  private async sincronizarSecciones(
+    repo: Repository<SeccionXModulouser>, idModuloUser: number, idsSeccion: number[], permitidas: Set<number>,
+    auditor: ContextoAuditoria, auditorias: AuditoriaPendiente[],
+  ) {
     if (!permitidas.size) return;
     const existentes = await repo.find({
       where: { id_modulouser: idModuloUser, id_seccion: In([...permitidas]) },
-      select: { id: true, id_seccion: true, flag: true },
+      select: { id: true, id_modulouser: true, id_seccion: true, flag: true },
       order: { id: 'ASC' },
     });
     const porSeccion = new Map<number, SeccionXModulouser>();
@@ -289,13 +319,23 @@ export class ModuloXUserService implements OnModuleInit {
     }
 
     const pedidas = new Set(idsSeccion);
+    const tabla = 'seccion_x_modulouser';
     for (const id_seccion of idsSeccion) {
       const fila = porSeccion.get(id_seccion);
-      if (!fila) await repo.insert({ id_modulouser: idModuloUser, id_seccion, flag: true });
-      else if (!fila.flag) await repo.update(fila.id!, { flag: true });
+      if (!fila) {
+        const nueva = { id_modulouser: idModuloUser, id_seccion, flag: true };
+        const { identifiers } = await repo.insert(nueva);
+        const id = identifiers[0].id;
+        auditorias.push(() => this.auditoriaService.registrarCreate({ ...auditor, tabla, id_registro: id }, { id, ...nueva }));
+      } else if (!fila.flag) {
+        await repo.update(fila.id!, { flag: true });
+        auditorias.push(() => this.auditoriaService.registrarCreate({ ...auditor, tabla, id_registro: fila.id }, { ...fila, flag: true }));
+      }
     }
-    const quitar = existentes.filter((fila) => fila.flag && !pedidas.has(fila.id_seccion!)).map((fila) => fila.id!);
+    const quitadas = existentes.filter((fila) => fila.flag && !pedidas.has(fila.id_seccion!));
+    const quitar = quitadas.map((fila) => fila.id!);
     if (quitar.length) await repo.update({ id: In(quitar) }, { flag: false });
+    quitadas.forEach((fila) => auditorias.push(() => this.auditoriaService.registrarDelete({ ...auditor, tabla, id_registro: fila.id }, fila)));
   }
 
   // Gestión de secciones por módulo de usuario (página seccion-x-modulouser)
@@ -341,14 +381,17 @@ export class ModuloXUserService implements OnModuleInit {
    * Deja en un módulo del usuario las secciones enviadas (solo entre las que puede dar quien administra;
    * las demás quedan como están). Quitar = flag 0; volver a dar = reactivar el mismo registro.
    */
-  async asignarSeccionesModuloUsuario(idModuloUser: number, idAdmin: number, idsSeccion: number[]) {
+  async asignarSeccionesModuloUsuario(idModuloUser: number, auditor: ContextoAuditoria, idsSeccion: number[]) {
+    const idAdmin = auditor.id_user;
+    const auditorias: AuditoriaPendiente[] = [];
     const moduloUser = await this.moduloUsuarioAdministrable(idModuloUser, idAdmin);
     const permitidas = await this.seccionesPermitidas(idAdmin, moduloUser.id_modulo!);
     const ajenas = idsSeccion.filter((id) => !permitidas.has(id));
     if (ajenas.length) throw new BadRequestException(`No puedes dar secciones que no tienes en este módulo (id: ${ajenas.join(', ')})`);
 
     await this.dataSource.transaction((manager) =>
-      this.sincronizarSecciones(manager.getRepository(SeccionXModulouser), moduloUser.id!, idsSeccion, permitidas));
+      this.sincronizarSecciones(manager.getRepository(SeccionXModulouser), moduloUser.id!, idsSeccion, permitidas, auditor, auditorias));
+    await Promise.all(auditorias.map((registrar) => registrar()));
     const [actualizado] = await this.conSecciones([moduloUser]);
     return actualizado;
   }

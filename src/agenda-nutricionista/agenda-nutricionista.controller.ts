@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { AgendaNutricionistaService } from './agenda-nutricionista.service';
 import { CreateAgendaNutricionistaDto } from './dto/create-agenda-nutricionista.dto';
@@ -5,7 +7,6 @@ import { UpdateAgendaNutricionistaDto } from './dto/update-agenda-nutricionista.
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { BuscarAgendaRangoDto } from './dto/buscar-agenda-rango.dto';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
-import { GetUser } from 'src/user/decorator/get-user.decorator';
 
 // Con sesión: las citas "Importante" solo las crea y modifica un super usuario
 @UseGuards(JwtAuthGuard)
@@ -14,8 +15,8 @@ export class AgendaNutricionistaController {
   constructor(private readonly agendaNutricionistaService: AgendaNutricionistaService) {}
 
   @Post()
-  create(@Body() createAgendaNutricionistaDto: CreateAgendaNutricionistaDto, @GetUser('id') idUser: number) {
-    return this.agendaNutricionistaService.create(createAgendaNutricionistaDto, idUser);
+  create(@Body() createAgendaNutricionistaDto: CreateAgendaNutricionistaDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.agendaNutricionistaService.create(createAgendaNutricionistaDto, auditor);
   }
 
   @Get()
@@ -46,12 +47,12 @@ export class AgendaNutricionistaController {
   }
 
   @Patch('/id/:id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto, @GetUser('id') idUser: number) {
-    return this.agendaNutricionistaService.update(id, updateAgendaNutricionistaDto, idUser);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.agendaNutricionistaService.update(id, updateAgendaNutricionistaDto, auditor);
   }
 
   @Delete('/id/:id')
-  remove(@Param('id', ParseIntPipe) id: number, @GetUser('id') idUser: number) {
-    return this.agendaNutricionistaService.remove(id, idUser);
+  remove(@Param('id', ParseIntPipe) id: number, @Auditor() auditor: ContextoAuditoria) {
+    return this.agendaNutricionistaService.remove(id, auditor);
   }
 }

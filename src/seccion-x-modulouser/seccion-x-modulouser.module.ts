@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { SeccionXModulouserService } from './seccion-x-modulouser.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -12,6 +13,7 @@ import { ModuloXUserModule } from 'src/modulo-x-user/modulo-x-user.module';
   imports: [
         UserModule,
         ModuloXUserModule,
+        UserAuditoriaModule,
         TypeOrmModule.forFeature([SeccionXModulouser])
       ]
 })

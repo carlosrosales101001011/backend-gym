@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, Post, Put, Body, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
 import { GetUser } from 'src/user/decorator/get-user.decorator';
@@ -25,8 +27,9 @@ export class SeccionXModulouserController {
   }
 
   @Post('/bulk')
-  createBulk(@Body() createSeccionXModuloUserDto: CreateSeccionXModulouserDto[]) {
-    return this.seccionXModuloService.createBulk(createSeccionXModuloUserDto);
+  @UseGuards(JwtAuthGuard)
+  createBulk(@Body() createSeccionXModuloUserDto: CreateSeccionXModulouserDto[], @Auditor() auditor: ContextoAuditoria) {
+    return this.seccionXModuloService.createBulk(createSeccionXModuloUserDto, auditor);
   }
   
 
@@ -40,7 +43,7 @@ export class SeccionXModulouserController {
 
   @Put('/modulo-usuario/:id')
   @UseGuards(JwtAuthGuard)
-  asignarSecciones(@Param('id', ParseIntPipe) idModuloUser: number, @GetUser('id') idAdmin: number, @Body() { ids_seccion }: AsignarSeccionesDto) {
-    return this.moduloXUserService.asignarSeccionesModuloUsuario(idModuloUser, idAdmin, ids_seccion);
+  asignarSecciones(@Param('id', ParseIntPipe) idModuloUser: number, @Auditor() auditor: ContextoAuditoria, @Body() { ids_seccion }: AsignarSeccionesDto) {
+    return this.moduloXUserService.asignarSeccionesModuloUsuario(idModuloUser, auditor, ids_seccion);
   }
 }

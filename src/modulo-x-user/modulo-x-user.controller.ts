@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, Post, Put, Patch, Body, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { ModuloXUserService } from './modulo-x-user.service';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
@@ -12,8 +14,9 @@ export class ModuloXUserController {
   constructor(private readonly moduloXUserService: ModuloXUserService) {}
   
   @Post('/bulk')
-  create(@Body() createModuloXUserDto: CreateModuloXUserDto[]) {
-    return this.moduloXUserService.createBulk(createModuloXUserDto);
+  @UseGuards(JwtAuthGuard)
+  create(@Body() createModuloXUserDto: CreateModuloXUserDto[], @Auditor() auditor: ContextoAuditoria) {
+    return this.moduloXUserService.createBulk(createModuloXUserDto, auditor);
   }
   @Get('/user/')
   @UseGuards(JwtAuthGuard)
@@ -23,8 +26,8 @@ export class ModuloXUserController {
   /** El usuario logueado fija / desfija uno de SUS módulos (chincheta del Home) */
   @Patch('/me/id/:id/fijado')
   @UseGuards(JwtAuthGuard)
-  cambiarFijado(@Param('id', ParseIntPipe) id: number, @GetUser('id') idUser: number, @Body() { is_fijado }: CambiarFijadoDto) {
-    return this.moduloXUserService.cambiarFijado(id, idUser, is_fijado);
+  cambiarFijado(@Param('id', ParseIntPipe) id: number, @Auditor() auditor: ContextoAuditoria, @Body() { is_fijado }: CambiarFijadoDto) {
+    return this.moduloXUserService.cambiarFijado(id, auditor, is_fijado);
   }
 
   @Get('/user/secciones')
@@ -61,7 +64,7 @@ export class ModuloXUserController {
 
   @Put('/usuario/:id')
   @UseGuards(JwtAuthGuard)
-  asignarModulos(@Param('id', ParseIntPipe) idUsuario: number, @GetUser('id') idAdmin: number, @Body() asignarModulosDto: AsignarModulosDto) {
-    return this.moduloXUserService.asignarModulos(idUsuario, idAdmin, asignarModulosDto);
+  asignarModulos(@Param('id', ParseIntPipe) idUsuario: number, @Auditor() auditor: ContextoAuditoria, @Body() asignarModulosDto: AsignarModulosDto) {
+    return this.moduloXUserService.asignarModulos(idUsuario, auditor, asignarModulosDto);
   }
 }

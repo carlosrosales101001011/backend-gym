@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -42,6 +44,7 @@ export class AgendaNutricionistaService {
     private readonly userRepository: Repository<User>,
     private readonly fullTextSearchService: FullTextSearchService,
     private readonly agendaGateway: AgendaNutricionistaGateway,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
   /**
@@ -104,14 +107,17 @@ export class AgendaNutricionistaService {
     }
   }
 
-  async create(createAgendaNutricionistaDto: CreateAgendaNutricionistaDto, idUser: number) {
+  async create(createAgendaNutricionistaDto: CreateAgendaNutricionistaDto, auditor: ContextoAuditoria) {
+    const idUser = auditor.id_user;
     const labels = await this.getLabels(createAgendaNutricionistaDto);
     if (esImportante(labels.label_estado) && !(await this.esSuperUsuario(idUser))) throw new ForbiddenException('Solo un super usuario puede marcar una cita como importante');
     const { fecha, hora_inicio, duracionxmin } = createAgendaNutricionistaDto;
     await this.validarCruce(fecha, hora_inicio, duracionxmin);
     try {
       const cita = this.agendaRepository.create({ ...createAgendaNutricionistaDto, ...labels });
-      const { id } = await this.agendaRepository.save(cita);
+      const creada = await this.agendaRepository.save(cita);
+      const { id } = creada;
+      await this.auditoriaService.registrarCreate({ ...auditor, tabla: 'agenda_nutricionista', id_registro: id }, creada);
       // Tras el save el id siempre viene (en la entidad es opcional solo para el create)
       this.agendaGateway.notificarCambio({ accion: 'crear', id: id! });
       return { ok: true, msg: 'creado con exito', id };
@@ -175,7 +181,8 @@ export class AgendaNutricionistaService {
     return cita;
   }
 
-  async update(id: number, updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto, idUser: number) {
+  async update(id: number, updateAgendaNutricionistaDto: UpdateAgendaNutricionistaDto, auditor: ContextoAuditoria) {
+    const idUser = auditor.id_user;
     const actual = await this.findOne(id);
     const labels = await this.getLabels(updateAgendaNutricionistaDto, actual.label_estado);
     if ((esImportante(actual.label_estado) || esImportante(labels.label_estado)) && !(await this.esSuperUsuario(idUser))) {
@@ -194,7 +201,9 @@ export class AgendaNutricionistaService {
       id,
     );
     try {
-      await this.agendaRepository.update(id, { ...updateAgendaNutricionistaDto, ...labels });
+      const cambios = { ...updateAgendaNutricionistaDto, ...labels };
+      await this.agendaRepository.update(id, cambios);
+      await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'agenda_nutricionista', id_registro: id }, actual, cambios);
       this.agendaGateway.notificarCambio({ accion: 'editar', id });
       return { ok: true, msg: 'actualizado con exito' };
     } catch (error) {
@@ -203,10 +212,11 @@ export class AgendaNutricionistaService {
   }
 
   /** Borrado lógico */
-  async remove(id: number, idUser: number) {
-    const { label_estado } = await this.findOne(id);
-    if (esImportante(label_estado) && !(await this.esSuperUsuario(idUser))) throw new ForbiddenException('Solo un super usuario puede eliminar una cita importante');
+  async remove(id: number, auditor: ContextoAuditoria) {
+    const cita = await this.findOne(id);
+    if (esImportante(cita.label_estado) && !(await this.esSuperUsuario(auditor.id_user))) throw new ForbiddenException('Solo un super usuario puede eliminar una cita importante');
     await this.agendaRepository.update(id, { flag: false });
+    await this.auditoriaService.registrarDelete({ ...auditor, tabla: 'agenda_nutricionista', id_registro: id }, cita);
     this.agendaGateway.notificarCambio({ accion: 'eliminar', id });
     return { ok: true, msg: 'eliminado con exito' };
   }

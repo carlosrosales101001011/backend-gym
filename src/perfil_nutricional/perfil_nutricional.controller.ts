@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
 import { PerfilNutricionalService } from './perfil_nutricional.service';
@@ -10,8 +12,8 @@ export class PerfilNutricionalController {
   constructor(private readonly perfilNutricionalService: PerfilNutricionalService) {}
 
   @Post()
-  create(@Body() createPerfilNutricionalDto: CreatePerfilNutricionalDto) {
-    return this.perfilNutricionalService.create(createPerfilNutricionalDto);
+  create(@Body() createPerfilNutricionalDto: CreatePerfilNutricionalDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.perfilNutricionalService.create(createPerfilNutricionalDto, auditor);
   }
 
   /** Fechas del paciente, de la más antigua a la más reciente */
@@ -26,12 +28,12 @@ export class PerfilNutricionalController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() updatePerfilNutricionalDto: UpdatePerfilNutricionalDto) {
-    return this.perfilNutricionalService.update(id, updatePerfilNutricionalDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updatePerfilNutricionalDto: UpdatePerfilNutricionalDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.perfilNutricionalService.update(id, updatePerfilNutricionalDto, auditor);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.perfilNutricionalService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Auditor() auditor: ContextoAuditoria) {
+    return this.perfilNutricionalService.remove(id, auditor);
   }
 }

@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { ModuloXUserService } from './modulo-x-user.service';
 import { ModuloXUserController } from './modulo-x-user.controller';
@@ -13,7 +14,7 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 @Module({
   controllers: [ModuloXUserController],
   providers: [ModuloXUserService, FullTextSearchService],
-  imports: [UserModule, TypeOrmModule.forFeature([ModuloXUser, SeccionXModulouser, User, Modulo, Seccion])],
+  imports: [UserModule, UserAuditoriaModule, TypeOrmModule.forFeature([ModuloXUser, SeccionXModulouser, User, Modulo, Seccion])],
   // Lo usa seccion-x-modulouser (mismas reglas de quién administra a quién)
   exports: [ModuloXUserService],
 })

@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -31,7 +33,8 @@ export class EmpresaSucursalService {
         private readonly empresaAlmacenRepository: Repository<EmpresaAlmacen>,
         @InjectRepository(ProductoMovimiento)
         private readonly productoMovimientoRepository: Repository<ProductoMovimiento>,
-        private readonly fullTextSearchService: FullTextSearchService
+        private readonly fullTextSearchService: FullTextSearchService,
+        private readonly auditoriaService: UserAuditoriaService,
       ){}
 
   private async getLabels(dto: {
@@ -67,7 +70,8 @@ export class EmpresaSucursalService {
     return labels;
   }
 
-  async create(createEmpresaSucursalDto: CreateEmpresaSucursalDto, iduser: number) {
+  async create(createEmpresaSucursalDto: CreateEmpresaSucursalDto, auditor: ContextoAuditoria) {
+    const iduser = auditor.id_user;
     try {
       const user = await this.userRepository.findOne({where: {id: iduser}});
       if (!user) throw new BadRequestException(`Usuario con id ${iduser} no encontrado`);
@@ -78,6 +82,7 @@ export class EmpresaSucursalService {
         ...labels
       })
       await this.empresaSucursalRepository.save(empresaSucursal)
+      await this.auditoriaService.registrarCreate({ ...auditor, tabla: 'empresa_sucursal', id_registro: empresaSucursal.id }, empresaSucursal)
       return {
         ok: true,
         msg: 'creado con exito'
@@ -109,16 +114,19 @@ export class EmpresaSucursalService {
     return await this.empresaSucursalRepository.findOne({where: {id, flag: true}, select: {id: true, codigo: true, nombre: true, direccion: true, ubigeo: true, telefono: true, email: true, id_tipo: true, label_tipo: false, id_responsable: true, label_responsable: false, id_estado: true, label_estado: false}});
   }
 
-  async update(id: number, updateEmpresaSucursalDto: UpdateEmpresaSucursalDto) {
+  async update(id: number, updateEmpresaSucursalDto: UpdateEmpresaSucursalDto, auditor: ContextoAuditoria) {
     const labels = await this.getLabels(updateEmpresaSucursalDto);
+    const cambios = { ...updateEmpresaSucursalDto, ...labels };
+    // Fila completa antes del cambio (findOne solo trae algunas columnas)
+    const actual = await this.empresaSucursalRepository.findOneBy({ id });
     const empresaSucursal = await this.empresaSucursalRepository.preload({
       id,
-      ...updateEmpresaSucursalDto,
-      ...labels
+      ...cambios
     });
-    if (!empresaSucursal) throw new BadRequestException(`EmpresaSucursal with id ${id} not found`);
+    if (!actual || !empresaSucursal) throw new BadRequestException(`EmpresaSucursal with id ${id} not found`);
     try {
       await this.empresaSucursalRepository.save(empresaSucursal);
+      await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'empresa_sucursal', id_registro: id }, actual, cambios);
       if (empresaSucursal.nombre) {
         await this.empresaAlmacenRepository.update(
           { id_sucursal: id },
@@ -142,8 +150,11 @@ export class EmpresaSucursalService {
     }
   }
 
-  remove(id: number) {
-    return this.empresaSucursalRepository.update(id, {flag: false});
+  async remove(id: number, auditor: ContextoAuditoria) {
+    const actual = await this.empresaSucursalRepository.findOneBy({ id });
+    const resultado = await this.empresaSucursalRepository.update(id, {flag: false});
+    if (actual) await this.auditoriaService.registrarDelete({ ...auditor, tabla: 'empresa_sucursal', id_registro: id }, actual);
+    return resultado;
   }
 
   async findSearch (  q: string,

@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -27,7 +29,8 @@ export class PersonaEventosAsistenciaService {
     private readonly personaRepository: Repository<Persona>,
     @InjectRepository(Terminologia)
     private readonly terminologiaRepository: Repository<Terminologia>,
-    private readonly fullTextSearchService: FullTextSearchService
+    private readonly fullTextSearchService: FullTextSearchService,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
   async onModuleInit() {
@@ -72,7 +75,7 @@ export class PersonaEventosAsistenciaService {
   }
 
   /** creador: usuario logueado que registra la asistencia (lo entrega el guard con @UsuarioCreador) */
-  async create(createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, creador: UsuarioCreador) {
+  async create(createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, creador: UsuarioCreador, auditor: ContextoAuditoria) {
     try {
       // Sin tipo de asistencia (ej. las que llegan del dispositivo): Entrada
       const dto = { ...createPersonaEventosAsistenciaDto, id_subtipo: createPersonaEventosAsistenciaDto.id_subtipo || ID_SUBTIPO_ASISTENCIA_POR_DEFECTO };
@@ -85,6 +88,7 @@ export class PersonaEventosAsistenciaService {
         fecha_registro: new Date(),
       })
       await this.personaEventosAsistenciaRepository.save(evento)
+      await this.auditoriaService.registrarCreate({ ...auditor, tabla: 'persona_eventos_asistencia', id_registro: evento.id }, evento)
       return {
         ok: true,
         msg: 'creado con exito'
@@ -136,16 +140,19 @@ export class PersonaEventosAsistenciaService {
     return await this.personaEventosAsistenciaRepository.findOne({where: {id, flag: true}, select: {id: true, id_persona: true, label_nombres_apellidos_persona: false, id_tipo_evento: true, label_tipo_evento: false, deviceSN: true, fecha_registro: true}});
   }
 
-  async update(id: number, updatePersonaEventosAsistenciaDto: UpdatePersonaEventosAsistenciaDto) {
+  async update(id: number, updatePersonaEventosAsistenciaDto: UpdatePersonaEventosAsistenciaDto, auditor: ContextoAuditoria) {
     const labels = await this.getLabels(updatePersonaEventosAsistenciaDto);
+    const cambios = { ...updatePersonaEventosAsistenciaDto, ...labels };
+    // Fila completa antes del cambio (findOne solo trae algunas columnas)
+    const actual = await this.personaEventosAsistenciaRepository.findOneBy({ id });
     const evento = await this.personaEventosAsistenciaRepository.preload({
       id,
-      ...updatePersonaEventosAsistenciaDto,
-      ...labels
+      ...cambios
     });
-    if (!evento) throw new BadRequestException(`PersonaEventosAsistencia with id ${id} not found`);
+    if (!actual || !evento) throw new BadRequestException(`PersonaEventosAsistencia with id ${id} not found`);
     try {
       await this.personaEventosAsistenciaRepository.save(evento);
+      await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'persona_eventos_asistencia', id_registro: id }, actual, cambios);
       return {
         ok: true,
         msg: 'actualizado con exito'
@@ -155,8 +162,11 @@ export class PersonaEventosAsistenciaService {
     }
   }
 
-  remove(id: number) {
-    return this.personaEventosAsistenciaRepository.update(id, {flag: false});
+  async remove(id: number, auditor: ContextoAuditoria) {
+    const actual = await this.personaEventosAsistenciaRepository.findOneBy({ id });
+    const resultado = await this.personaEventosAsistenciaRepository.update(id, {flag: false});
+    if (actual) await this.auditoriaService.registrarDelete({ ...auditor, tabla: 'persona_eventos_asistencia', id_registro: id }, actual);
+    return resultado;
   }
 
   /**

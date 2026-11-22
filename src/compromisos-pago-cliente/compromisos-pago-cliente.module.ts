@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CompromisosPagoClienteService } from './compromisos-pago-cliente.service';
@@ -12,6 +13,6 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 @Module({
   controllers: [CompromisosPagoClienteController],
   providers: [CompromisosPagoClienteService, FullTextSearchService],
-  imports: [TypeOrmModule.forFeature([CompromisosPagoCliente, Persona, Terminologia, Venta, User])],
+  imports: [TypeOrmModule.forFeature([CompromisosPagoCliente, Persona, Terminologia, Venta, User]), UserAuditoriaModule],
 })
 export class CompromisosPagoClienteModule {}

@@ -1,3 +1,5 @@
+import { UserAuditoriaService } from 'src/user-auditoria/user-auditoria.service';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
@@ -31,19 +33,22 @@ export class IngredientesService {
     private readonly terminologiaRepository: Repository<Terminologia>,
     private readonly dataSource: DataSource,
     private readonly fullTextSearchService: FullTextSearchService,
+    private readonly auditoriaService: UserAuditoriaService,
   ){}
 
-  async create(createIngredienteDto: CreateIngredienteDto) {
+  async create(createIngredienteDto: CreateIngredienteDto, auditor: ContextoAuditoria) {
     const { unidades = [], alergenos = [], ...datos } = createIngredienteDto;
     const filasUnidades = await this.armarUnidades(unidades);
     const filasAlergenos = await this.armarAlergenos(alergenos);
     try {
-      const id = await this.dataSource.transaction(async (manager) => {
-        const ingrediente = await manager.save(Ingrediente, manager.create(Ingrediente, datos));
-        await this.reemplazarUnidades(manager, ingrediente.id!, filasUnidades);
-        await this.reemplazarAlergenos(manager, ingrediente.id!, filasAlergenos);
-        return ingrediente.id;
+      const ingrediente = await this.dataSource.transaction(async (manager) => {
+        const guardado = await manager.save(Ingrediente, manager.create(Ingrediente, datos));
+        await this.reemplazarUnidades(manager, guardado.id!, filasUnidades);
+        await this.reemplazarAlergenos(manager, guardado.id!, filasAlergenos);
+        return guardado;
       });
+      const id = ingrediente.id;
+      await this.auditoriaService.registrarCreate({ ...auditor, tabla: 'ingredientes', id_registro: id }, ingrediente);
       return { ok: true, id, msg: 'creado con exito' };
     } catch (error) {
       this.handleDBExceptions(error);
@@ -92,7 +97,7 @@ export class IngredientesService {
     return conDetalle;
   }
 
-  async update(id: number, updateIngredienteDto: UpdateIngredienteDto) {
+  async update(id: number, updateIngredienteDto: UpdateIngredienteDto, auditor: ContextoAuditoria) {
     const actual = await this.findOne(id);
     const { unidades, alergenos, ...datos } = updateIngredienteDto;
 
@@ -114,6 +119,8 @@ export class IngredientesService {
           await manager.update(RecetasIngrediente, { id_ingrediente: id }, { label_ingrediente: datos.nombre });
         }
       });
+      // Solo las columnas del ingrediente (sus unidades y alérgenos no se auditan)
+      await this.auditoriaService.registrarUpdate({ ...auditor, tabla: 'ingredientes', id_registro: id }, actual, datos);
       return { ok: true, msg: 'actualizado con exito' };
     } catch (error) {
       this.handleDBExceptions(error);
@@ -121,13 +128,16 @@ export class IngredientesService {
   }
 
   /** Borrado lógico. No se permite si alguna receta activa lo usa. */
-  async remove(id: number) {
+  async remove(id: number, auditor: ContextoAuditoria) {
     await this.findOne(id);
     const recetas = await this.recetasActivasQueUsan(id);
     if (recetas.length > 0) {
       throw new BadRequestException(`No se puede eliminar: lo usan las recetas ${recetas.join(', ')}`);
     }
+    // Fila del ingrediente tal cual (findOne trae además unidades y alérgenos)
+    const fila = await this.ingredienteRepository.findOneBy({ id });
     await this.ingredienteRepository.update(id, { flag: false });
+    if (fila) await this.auditoriaService.registrarDelete({ ...auditor, tabla: 'ingredientes', id_registro: id }, fila);
     return { ok: true, msg: 'eliminado con exito' };
   }
 

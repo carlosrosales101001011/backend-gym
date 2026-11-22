@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { EmpresaSucursalService } from './empresa-sucursal.service';
 import { EmpresaSucursalController } from './empresa-sucursal.controller';
@@ -14,6 +15,6 @@ import { ProductoMovimiento } from 'src/producto-movimiento/entities/producto-mo
 @Module({
   controllers: [EmpresaSucursalController],
   providers: [EmpresaSucursalService, FullTextSearchService],
-  imports: [TypeOrmModule.forFeature([EmpresaSucursal, Terminologia, Empresa, Persona, User, EmpresaAlmacen, ProductoMovimiento])]
+  imports: [TypeOrmModule.forFeature([EmpresaSucursal, Terminologia, Empresa, Persona, User, EmpresaAlmacen, ProductoMovimiento]), UserAuditoriaModule]
 })
 export class EmpresaSucursalModule {}

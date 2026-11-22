@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { RecetasService } from './recetas.service';
 import { CreateRecetaDto } from './dto/create-receta.dto';
@@ -12,8 +14,8 @@ export class RecetasController {
   constructor(private readonly recetasService: RecetasService) {}
 
   @Post()
-  create(@Body() createRecetaDto: CreateRecetaDto) {
-    return this.recetasService.create(createRecetaDto);
+  create(@Body() createRecetaDto: CreateRecetaDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.recetasService.create(createRecetaDto, auditor);
   }
 
   @Get()
@@ -38,12 +40,12 @@ export class RecetasController {
   }
 
   @Patch('/id/:id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateRecetaDto: UpdateRecetaDto) {
-    return this.recetasService.update(id, updateRecetaDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateRecetaDto: UpdateRecetaDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.recetasService.update(id, updateRecetaDto, auditor);
   }
 
   @Delete('/id/:id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.recetasService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Auditor() auditor: ContextoAuditoria) {
+    return this.recetasService.remove(id, auditor);
   }
 }

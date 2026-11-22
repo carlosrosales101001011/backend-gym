@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PersonaEventosAsistenciaService } from './persona_eventos_asistencia.service';
@@ -10,6 +11,6 @@ import { FullTextSearchService } from 'src/common/FullTextSearchService.service'
 @Module({
   controllers: [PersonaEventosAsistenciaController],
   providers: [PersonaEventosAsistenciaService, FullTextSearchService],
-  imports: [TypeOrmModule.forFeature([PersonaEventosAsistencia, Persona, Terminologia])]
+  imports: [TypeOrmModule.forFeature([PersonaEventosAsistencia, Persona, Terminologia]), UserAuditoriaModule]
 })
 export class PersonaEventosAsistenciaModule {}

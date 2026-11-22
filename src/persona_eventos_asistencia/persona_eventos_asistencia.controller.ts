@@ -1,3 +1,5 @@
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/user/guard/jwt-auth.guard';
 import { UsuarioCreador, type UsuarioCreador as Creador } from 'src/user/decorator/usuario-creador.decorator';
@@ -15,8 +17,8 @@ export class PersonaEventosAsistenciaController {
   // Quien registra sale del guard: id_usercreated y label_nombres_apellidos_usercreated
   @Post()
   @UseGuards(JwtAuthGuard)
-  create(@Body() createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, @UsuarioCreador() creador: Creador) {
-    return this.personaEventosAsistenciaService.create(createPersonaEventosAsistenciaDto, creador);
+  create(@Body() createPersonaEventosAsistenciaDto: CreatePersonaEventosAsistenciaDto, @UsuarioCreador() creador: Creador, @Auditor() auditor: ContextoAuditoria) {
+    return this.personaEventosAsistenciaService.create(createPersonaEventosAsistenciaDto, creador, auditor);
   }
 
   @Get()
@@ -78,12 +80,14 @@ export class PersonaEventosAsistenciaController {
   }
 
   @Patch('/id/:id')
-  update(@Param('id') id: string, @Body() updatePersonaEventosAsistenciaDto: UpdatePersonaEventosAsistenciaDto) {
-    return this.personaEventosAsistenciaService.update(+id, updatePersonaEventosAsistenciaDto);
+  @UseGuards(JwtAuthGuard)
+  update(@Param('id') id: string, @Body() updatePersonaEventosAsistenciaDto: UpdatePersonaEventosAsistenciaDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.personaEventosAsistenciaService.update(+id, updatePersonaEventosAsistenciaDto, auditor);
   }
 
   @Delete('/id/:id')
-  remove(@Param('id') id: string) {
-    return this.personaEventosAsistenciaService.remove(+id);
+  @UseGuards(JwtAuthGuard)
+  remove(@Param('id') id: string, @Auditor() auditor: ContextoAuditoria) {
+    return this.personaEventosAsistenciaService.remove(+id, auditor);
   }
 }

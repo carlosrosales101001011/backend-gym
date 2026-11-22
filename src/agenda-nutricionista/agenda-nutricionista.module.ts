@@ -1,3 +1,4 @@
+import { UserAuditoriaModule } from 'src/user-auditoria/user-auditoria.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgendaNutricionistaService } from './agenda-nutricionista.service';
@@ -14,6 +15,6 @@ import { AgendaNutricionistaGateway } from './agenda-nutricionista.gateway';
   controllers: [AgendaNutricionistaController],
   providers: [AgendaNutricionistaService, FullTextSearchService, AgendaNutricionistaGateway],
   // UserModule: JwtService y JwtStrategy para validar el token del socket
-  imports: [TypeOrmModule.forFeature([AgendaNutricionista, Persona, Terminologia, User]), UserModule],
+  imports: [TypeOrmModule.forFeature([AgendaNutricionista, Persona, Terminologia, User]), UserModule, UserAuditoriaModule],
 })
 export class AgendaNutricionistaModule {}

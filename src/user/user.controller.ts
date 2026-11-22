@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, SetMetadata, Query, ParseIntPipe, ParseUUIDPipe } from '@nestjs/common';
+import { Auditor } from 'src/user-auditoria/decorator/auditor.decorator';
+import type { ContextoAuditoria } from 'src/user-auditoria/dto/create-user-auditoria.dto';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, SetMetadata, Query, ParseIntPipe, ParseUUIDPipe, Ip } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -16,13 +18,13 @@ export class UserController {
   /** Registra un usuario; quien lo registra (id_userParent) sale del token, no del body */
   @Post('register')
   @UseGuards(JwtAuthGuard)
-  create(@Body() createUserDto: CreateUserDto, @GetUser('id') idUserParent: number) {
-    return this.userService.create(createUserDto, idUserParent);
+  create(@Body() createUserDto: CreateUserDto, @Auditor() auditor: ContextoAuditoria) {
+    return this.userService.create(createUserDto, auditor);
   }
 
   @Post('login')
-  login(@Body() LoginUserDto: LoginUserDto) {
-    return this.userService.login(LoginUserDto);
+  login(@Body() LoginUserDto: LoginUserDto, @Ip() ip: string) {
+    return this.userService.login(LoginUserDto, ip);
   }
 
   @Get()
@@ -78,8 +80,8 @@ export class UserController {
   // Super usuario, rol y colaborador (quien lo registró o un super usuario; super usuario solo lo cambia otro super)
   @Patch('/id/:id/sistema')
   @UseGuards(JwtAuthGuard)
-  actualizarSistema(@Param('id', ParseIntPipe) id: number, @GetUser('id') idAdmin: number, @Body() actualizarSistemaDto: ActualizarSistemaDto) {
-    return this.userService.actualizarSistema(id, idAdmin, actualizarSistemaDto);
+  actualizarSistema(@Param('id', ParseIntPipe) id: number, @Auditor() auditor: ContextoAuditoria, @Body() actualizarSistemaDto: ActualizarSistemaDto) {
+    return this.userService.actualizarSistema(id, auditor, actualizarSistemaDto);
   }
 
   @Get(':id')
@@ -95,8 +97,8 @@ export class UserController {
   // Borrado lógico del usuario con sus módulos, secciones y permisos (quien lo registró o un super usuario)
   @Delete('/id/:id')
   @UseGuards(JwtAuthGuard)
-  eliminar(@Param('id', ParseIntPipe) id: number, @GetUser('id') idAdmin: number) {
-    return this.userService.eliminar(id, idAdmin);
+  eliminar(@Param('id', ParseIntPipe) id: number, @Auditor() auditor: ContextoAuditoria) {
+    return this.userService.eliminar(id, auditor);
   }
   // @Get('private')
   // @UseGuards(AuthGuard())
