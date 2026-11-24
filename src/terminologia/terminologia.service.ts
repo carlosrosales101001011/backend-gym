@@ -95,7 +95,8 @@ export class TerminologiaService {
       return lista.map(m=>{
         return {
           value: m.id,
-          label: m.valor
+          label: m.valor,
+          codigo: m.codigo
         }
       });
   }

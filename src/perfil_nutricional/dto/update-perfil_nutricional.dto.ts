@@ -20,6 +20,8 @@ export class UpdatePerfilNutricionalDto {
     @IsOptional() @IsBoolean() fuma_evida?: boolean | null;
     @IsOptional() @IsInt() @Min(1) @Max(10) estres_evida?: number | null;
     @IsOptional() @IsString() @MaxLength(30) actividadDiaria_evida?: string | null;
+    @IsOptional() @IsString() @MaxLength(100) frecuencia_evacuacion?: string | null;
+    @IsOptional() @IsString() @MaxLength(100) porciones_alimentos_x_dia?: string | null;
 
     // ---- Objetivo principal (ids de terminología separados por coma) ----
     @IsOptional() @IsString() @MaxLength(500) objetivo_principal?: string | null;

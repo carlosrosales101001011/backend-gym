@@ -50,6 +50,12 @@ export class PerfilNutricional {
     @Column({ type: 'varchar', length: 30, nullable: true })
     actividadDiaria_evida?: string | null; // Sedentario | Ligero | Moderado | Intenso
 
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    frecuencia_evacuacion?: string | null; // texto libre, ej. "2 veces al día"
+
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    porciones_alimentos_x_dia?: string | null; // texto libre, ej. "3 comidas y 2 snacks"
+
     // ---- Objetivo principal ----
     @Column(IDS)
     objetivo_principal?: string | null; // TERMINOLOGIA.ENTITY=>[id] (perfil-paciente / tipos-objetivos)

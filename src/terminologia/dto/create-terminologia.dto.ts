@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class CreateTerminologiaDto {
     
@@ -13,6 +13,11 @@ export class CreateTerminologiaDto {
 
     @IsString()
     valor!:string;
+
+    @IsString()
+    @MaxLength(150)
+    @IsOptional()
+    codigo?: string;
 
     @IsNumber()
     @IsOptional()

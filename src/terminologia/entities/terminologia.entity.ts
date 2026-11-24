@@ -41,6 +41,13 @@ export class Terminologia {
     })
     valor!: string;
 
+    /** Código propio del valor (ej. tipos de notificación); la mayoría no lo usa */
+    @Column('varchar', {
+        length: 150,
+        nullable: true,
+    })
+    codigo?: string;
+
     @Column('int', {
         default: 0,
     })
